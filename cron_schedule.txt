@@ -1,0 +1,36 @@
+# 株価データ取得スケジュール設定（実行スクリプト使用版）
+# 
+# 設定方法：
+# 1. crontab -e でcronエディタを開く
+# 2. 以下の内容をコピー&ペーストして保存
+# 3. crontab -l で設定を確認
+#
+# 注意事項：
+# - Python環境のパスも適切に設定してください（仮想環境を使用している場合）
+# - ログファイルのパスも必要に応じて調整してください
+
+# 日次：平日の夜間22時にJ-Quantsで株価データを取得
+0 22 * * 1-5 /usr/bin/python3 /Users/tak/Markets/Stocks/Stock-Analysis/scripts/run_jquants_daily.py >> /Users/tak/Markets/Stocks/Stock-Analysis/logs/jquants_daily.log 2>&1
+
+# 週次：日曜日の夜間20時にyfinanceで属性情報を取得
+0 20 * * 0 /usr/bin/python3 /Users/tak/Markets/Stocks/Stock-Analysis/scripts/run_yfinance_weekly.py >> /Users/tak/Markets/Stocks/Stock-Analysis/logs/yfinance_weekly.log 2>&1
+
+# 月次：毎月1日の夜間18時にマスターデータを更新
+0 18 1 * * /usr/bin/python3 /Users/tak/Markets/Stocks/Stock-Analysis/scripts/run_master_monthly.py >> /Users/tak/Markets/Stocks/Stock-Analysis/logs/master_monthly.log 2>&1
+
+# cronの時刻フォーマット説明：
+# 分 時 日 月 曜日 コマンド
+# 0-59 0-23 1-31 1-12 0-7 (0と7は日曜日)
+# 
+# 例：
+# 0 22 * * 1-5  = 平日の22時00分
+# 0 20 * * 0    = 日曜日の20時00分  
+# 0 18 1 * *    = 毎月1日の18時00分
+
+# 追加の設定例：
+# 
+# 仮想環境を使用する場合：
+# 0 22 * * 1-5 /path/to/venv/bin/python /Users/tak/Markets/Stocks/Stock-Analysis/scripts/run_jquants_daily.py >> /Users/tak/Markets/Stocks/Stock-Analysis/logs/jquants_daily.log 2>&1
+#
+# 環境変数を設定する場合：
+# 0 22 * * 1-5 bash -c 'export PYTHONPATH=/Users/tak/Markets/Stocks/Stock-Analysis && /usr/bin/python3 /Users/tak/Markets/Stocks/Stock-Analysis/scripts/run_jquants_daily.py' >> /Users/tak/Markets/Stocks/Stock-Analysis/logs/jquants_daily.log 2>&1

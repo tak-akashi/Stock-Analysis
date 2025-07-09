@@ -247,8 +247,8 @@ class JQuantsDataProcessor:
                 # 日付の解析に失敗した場合は5年前から開始
                 from_date = (datetime.now() - relativedelta(years=5)).strftime('%Y-%m-%d')
             
-            # 開始日が今日以降の場合はスキップ
-            if from_date >= to_date:
+            # 開始日が今日より後の場合はスキップ
+            if from_date > to_date:
                 print(f"銘柄コード: {code} は最新データです。スキップします... ({i+1}/{total_codes})")
                 continue
                 

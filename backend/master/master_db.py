@@ -133,7 +133,7 @@ class StockMasterDB:
             
             # 各種シンボルの生成
             df['yfinance_symbol'] = df['code'] + '.T'
-            df['jquants_code'] = df['code']
+            df['jquants_code'] = df['code'] + "0"
             df['is_active'] = True
             
             logger.info(f"Loaded {len(df)} stocks from Excel file")

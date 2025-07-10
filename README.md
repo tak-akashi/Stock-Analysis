@@ -4,42 +4,32 @@
 
 このプロジェクトは、日本の株式市場に関するデータを収集、保存、分析するためのツール群です。J-Quants APIおよびyfinanceライブラリを利用して、日々の株価、企業情報、銘柄マスターなどを自動で取得・更新し、SQLiteデータベースに格納します。
 
-収集したデータは、さらなる分析やバックテスト戦略の構築などに活用できます。
+収集したデータは、様々な分析手法（ミネルヴィニ戦略、高値・安値比率、相対力、チャートパターン分類など）を用いて評価され、統合的な視点から銘柄選定や投資戦略の構築に活用できます。
 
 ## 主な機能
 
-*   **日次株価取得 (J-Quants):**
-    *   平日の夜間にJ-Quants APIから最新の株価四本値（始値, 高値, 安値, 終値）および出来高を取得します。
-    *   取得データは `data/jquants.db` に保存されます。
-*   **週次企業情報取得 (yfinance):**
-    *   週末にyfinanceライブラリを通じて、各企業の属性情報（セクター、業種など）を取得します。
-*   **月次マスターデータ更新:**
-    *   毎月1回、最新の銘柄一覧（マスターデータ）を更新します。
+*   **データ収集と管理:**
+    *   **日次株価取得 (J-Quants):** 平日の夜間にJ-Quants APIから最新の株価四本値（始値, 高値, 安値, 終値）および出来高を取得し、`data/jquants.db` に保存します。
+    *   **週次企業情報取得 (yfinance):** 週末にyfinanceライブラリを通じて、各企業の属性情報（セクター、業種など）を取得し、`data/jquants.db` に保存します。
+    *   **月次マスターデータ更新:** 毎月1回、最新の銘柄一覧（マスターデータ）を更新し、`data/master.db` に保存します。
 
-## 分析機能
+*   **株式分析:**
+    *   **ミネルヴィニ戦略:** マーク・ミネルヴィニの投資基準に基づき、銘柄のトレンドと強さを評価します。
+    *   **高値・安値比率 (HL Ratio):** 過去一定期間の高値と安値に対する現在の株価の位置を評価し、買われすぎ・売られすぎを判断します。
+    *   **相対力 (Relative Strength):** 市場全体や他の銘柄と比較した株価の相対的な強さを評価します。
+    *   **チャートパターン分類:** 機械学習を用いて、株価チャートの形状を自動的に分類し、特定のパターン（上昇、下落、もみ合いなど）を識別します。
+    *   **統合分析:** 上記の各分析結果を組み合わせ、複合的なスコアや条件フィルタリングにより、多角的な視点から銘柄を評価します。
 
-`backend/analysis` ディレクトリには、以下の分析プログラムが含まれています。
+## 分析機能の詳細
 
-*   **`chart_classification.py`**: チャートパターンを分類するロジック。
-*   **`high_low_ratio.py`**: 高値・安値比率を計算するロジック。
-*   **`minervini.py`**: マーク・ミネルヴィニの株式スクリーニング戦略を実装。
-*   **`relative_strength.py`**: 相対力（Relative Strength）を計算するロジック。
-*   **`integrated_analysis.py`**: 上記の分析結果を統合し、複合的な評価を行うロジック。
-*   **`demo_integrated_analysis.py`**: `integrated_analysis.py` の利用例を示すデモスクリプト。
+`backend/analysis` ディレクトリには、以下の分析プログラムが含まれており、それぞれが特定の分析手法を実装しています。
 
-これらのプログラムは、収集した株価データや企業情報を用いて、特定の投資戦略やテクニカル分析に基づいた銘柄の評価を行います。
-
-### 分析機能の利用方法
-
-`integrated_analysis.py` は、`high_low_ratio.py`、`minervini.py`、`relative_strength.py` などで生成された分析結果を統合し、複合的なスコア（composite score）を算出します。これにより、複数の指標を横断的に評価し、より精度の高い銘柄選定を支援します。
-
-`demo_integrated_analysis.py` を実行することで、`integrated_analysis.py` の各種機能（特定日付の総合分析、上位銘柄ランキング、条件フィルタリング、複数日付の時系列分析、サマリー統計など）のデモンストレーションを確認できます。
-
-```bash
-python backend/analysis/demo_integrated_analysis.py
-```
-
-このデモスクリプトを実行する前に、各分析スクリプト（`high_low_ratio.py`、`minervini.py`、`relative_strength.py`）を実行して、`data/analysis_results.db` に分析結果が格納されていることを確認してください。
+*   **`minervini.py`**: マーク・ミネルヴィニの株式スクリーニング戦略を実装しています。株価と移動平均線の関係、52週高値・安値からの乖離率などを基に、銘柄のトレンドと強さを評価します。計算結果は `data/analysis_results.db` の `minervini` テーブルに保存されます。
+*   **`high_low_ratio.py`**: 銘柄の高値・安値比率を計算するロジックです。過去52週間の高値と安値の範囲内で、現在の株価がどの位置にあるかを示します。結果は `data/analysis_results.db` の `hl_ratio` テーブルに保存されます。
+*   **`relative_strength.py`**: 相対力（Relative Strength Percentage: RSP）および相対力指数（Relative Strength Index: RSI）を計算するロジックです。銘柄の市場に対する相対的なパフォーマンスを評価します。結果は `data/analysis_results.db` の `relative_strength` テーブルに保存されます。
+*   **`chart_classification.py`**: 株価チャートのパターンを分類するロジックです。過去の株価データから特定の期間（例: 20日、60日）のチャート形状を抽出し、「上昇」「下落」「もみ合い」などのパターンに分類します。結果は `data/analysis_results.db` の `classification_results` テーブルに保存されます。
+*   **`integrated_analysis.py`**: 上記の各分析プログラムによって生成された結果（`hl_ratio`, `minervini`, `relative_strength`, `classification_results`）を `data/analysis_results.db` から読み込み、それらを統合して複合的な評価を行うためのユーティリティ関数を提供します。これにより、複数の指標を横断的に評価し、より精度の高い銘柄選定を支援します。このスクリプト自体はデータを生成せず、既存のデータをクエリ・集計します。
+*   **`demo_integrated_analysis.py`**: `integrated_analysis.py` の利用例を示すデモスクリプトです。特定日付の総合分析、上位銘柄ランキング、条件フィルタリング、複数日付の時系列分析、サマリー統計など、`integrated_analysis.py` の各種機能のデモンストレーションを確認できます。
 
 ## ディレクトリ構成
 
@@ -52,12 +42,30 @@ python backend/analysis/demo_integrated_analysis.py
 │   └── yfinance/    # yfinance関連の処理
 ├── data/            # データベースファイル（.sqlite, .db）を格納
 ├── logs/            # cronジョブの実行ログ
+├── output/          # 分析結果の画像やエラーログなどを格納
 ├── notebook/        # (現在未使用)
 ├── scripts/         # 定期実行用のスクリプト群
 ├── test/            # テストコード
 ├── pyproject.toml   # プロジェクトの依存関係定義
 └── README.md        # このファイル
 ```
+
+## データベース構造
+
+このプロジェクトでは、主に以下のSQLiteデータベースファイルを使用します。
+
+*   **`data/jquants.db`**:
+    *   J-Quants APIから取得した日次株価データ（`daily_quotes`テーブル）や企業情報が格納されます。
+    *   `prices`テーブルも含まれる可能性があります。
+*   **`data/master.db`**:
+    *   銘柄マスターデータ（`stocks_master`テーブルなど）が格納されます。
+*   **`data/analysis_results.db`**:
+    *   各種分析プログラム（`minervini.py`, `high_low_ratio.py`, `relative_strength.py`, `chart_classification.py`）によって計算された結果が格納されます。
+    *   主なテーブル:
+        *   `minervini`: ミネルヴィニ戦略の評価結果
+        *   `hl_ratio`: 高値・安値比率の計算結果
+        *   `relative_strength`: 相対力（RSP, RSI）の計算結果
+        *   `classification_results`: チャートパターン分類の結果
 
 ## セットアップ方法
 
@@ -89,51 +97,73 @@ python backend/analysis/demo_integrated_analysis.py
 
 ## 使用方法
 
-### 手動でのデータ取得
+### 手動での実行
 
-各スクリプトを直接実行することで、任意のタイミングでデータを取得・更新できます。
+各スクリプトを直接実行することで、任意のタイミングでデータ取得や分析を実行できます。
 
 *   **J-Quants日次データ取得:**
+    J-Quants APIから日次株価データを取得します。
     ```bash
     python scripts/run_jquants_daily.py
     ```
-*   **yfinance週次データ取得:**
+
+*   **週次タスク (yfinanceデータ取得 & チャート分類):**
+    yfinanceから企業属性情報を取得し、チャートパターン分類を実行します。
     ```bash
-    python scripts/run_yfinance_weekly.py
+    python scripts/run_weekly_tasks.py
     ```
-*   **マスターデータ月次更新:**
+
+*   **月次マスターデータ更新:**
+    銘柄マスターデータを更新します。
     ```bash
     python scripts/run_master_monthly.py
     ```
 
+*   **日次分析フロー:**
+    高値・安値比率、ミネルヴィニ戦略、相対力（RSP/RSI）の計算とデータベースへの保存、およびその日の分析サマリーのログ出力を実行します。
+    ```bash
+    python scripts/run_daily_analysis.py
+    ```
+
+*   **統合分析デモ:**
+    `integrated_analysis.py` の機能（特定日付の総合分析、上位銘柄ランキング、条件フィルタリング、複数日付の時系列分析、サマリー統計など）のデモンストレーションを確認できます。このスクリプトを実行する前に、`run_daily_analysis.py` や `run_weekly_tasks.py` を実行して、`data/analysis_results.db` に分析結果が格納されていることを確認してください。
+    ```bash
+    python backend/analysis/demo_integrated_analysis.py
+    ```
+
 ### cronによる自動実行
 
-`cron_schedule.txt` に記載されている設定を参考に、cronにジョブを登録することで、データ取得・更新を自動化できます。
+`cron_schedule.txt` に記載されている設定を参考に、cronにジョブを登録することで、データ取得・更新・分析を自動化できます。
 
 **設定例:**
 ```crontab
 # 平日22時にJ-Quantsで株価データを取得
 0 22 * * 1-5 /path/to/python /Users/tak/Markets/Stocks/Stock-Analysis/scripts/run_jquants_daily.py >> /Users/tak/Markets/Stocks/Stock-Analysis/logs/jquants_daily.log 2>&1
 
-# 日曜20時にyfinanceで属性情報を取得
-0 20 * * 0 /path/to/python /Users/tak/Markets/Stocks/Stock-Analysis/scripts/run_yfinance_weekly.py >> /Users/tak/Markets/Stocks/Stock-Analysis/logs/yfinance_weekly.log 2>&1
+# 日曜20時に週次タスク（yfinanceデータ取得とチャート分類）を実行
+0 20 * * 0 /path/to/python /Users/tak/Markets/Stocks/Stock-Analysis/scripts/run_weekly_tasks.py >> /Users/tak/Markets/Stocks/Stock-Analysis/logs/weekly_tasks.log 2>&1
 
 # 毎月1日18時にマスターデータを更新
 0 18 1 * * /path/to/python /Users/tak/Markets/Stocks/Stock-Analysis/scripts/run_master_monthly.py >> /Users/tak/Markets/Stocks/Stock-Analysis/logs/master_monthly.log 2>&1
+
+# 平日23時に日次分析フローを実行
+0 23 * * 1-5 /path/to/python /Users/tak/Markets/Stocks/Stock-Analysis/scripts/run_daily_analysis.py >> /Users/tak/Markets/Stocks/Stock-Analysis/logs/daily_analysis.log 2>&1
 ```
-**注意:** `/path/to/python` の部分は、使用しているPython実行環境の絶対パスに置き換えてください。
+**注意:** `/path/to/python` の部分は、使用しているPython実行環境の絶対パスに置き換えてください。ログファイルのパスも適宜調整してください。
 
 ## 依存ライブラリ
 
 このプロジェクトでは、以下の主要なライブラリを使用しています。
 
-*   pandas
-*   yfinance
-*   requests
-*   backtrader
-*   matplotlib（未使用）
-*   plotly（未使用）
-*   seaborn（未使用）
-*   pytest
-
-詳細なリストは `pyproject.toml` を参照してください。
+*   pandas: データ操作と分析
+*   numpy: 数値計算
+*   sqlite3: SQLiteデータベース操作
+*   yfinance: Yahoo Financeからのデータ取得
+*   requests: HTTPリクエスト
+*   backtrader: バックテストフレームワーク（現在未使用の可能性あり）
+*   matplotlib: グラフ描画（チャート分類で使用）
+*   japanize_matplotlib: matplotlibの日本語表示対応（チャート分類で使用）
+*   scipy: 科学技術計算（チャート分類で使用）
+*   scikit-learn: 機械学習（チャート分類で使用）
+*   talib: テクニカル分析ライブラリ（Minerviniで使用、オプション）
+*   pytest: テストフレームワーク

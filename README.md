@@ -16,12 +16,37 @@
 *   **月次マスターデータ更新:**
     *   毎月1回、最新の銘柄一覧（マスターデータ）を更新します。
 
+## 分析機能
+
+`backend/analysis` ディレクトリには、以下の分析プログラムが含まれています。
+
+*   **`chart_classification.py`**: チャートパターンを分類するロジック。
+*   **`high_low_ratio.py`**: 高値・安値比率を計算するロジック。
+*   **`minervini.py`**: マーク・ミネルヴィニの株式スクリーニング戦略を実装。
+*   **`relative_strength.py`**: 相対力（Relative Strength）を計算するロジック。
+*   **`integrated_analysis.py`**: 上記の分析結果を統合し、複合的な評価を行うロジック。
+*   **`demo_integrated_analysis.py`**: `integrated_analysis.py` の利用例を示すデモスクリプト。
+
+これらのプログラムは、収集した株価データや企業情報を用いて、特定の投資戦略やテクニカル分析に基づいた銘柄の評価を行います。
+
+### 分析機能の利用方法
+
+`integrated_analysis.py` は、`high_low_ratio.py`、`minervini.py`、`relative_strength.py` などで生成された分析結果を統合し、複合的なスコア（composite score）を算出します。これにより、複数の指標を横断的に評価し、より精度の高い銘柄選定を支援します。
+
+`demo_integrated_analysis.py` を実行することで、`integrated_analysis.py` の各種機能（特定日付の総合分析、上位銘柄ランキング、条件フィルタリング、複数日付の時系列分析、サマリー統計など）のデモンストレーションを確認できます。
+
+```bash
+python backend/analysis/demo_integrated_analysis.py
+```
+
+このデモスクリプトを実行する前に、各分析スクリプト（`high_low_ratio.py`、`minervini.py`、`relative_strength.py`）を実行して、`data/analysis_results.db` に分析結果が格納されていることを確認してください。
 
 ## ディレクトリ構成
 
 ```
 .
 ├── backend/         # データ処理のコアロジック
+│   ├── analysis/    # 各種分析ロジック
 │   ├── jquants/     # J-Quants API関連の処理
 │   ├── master/      # 銘柄マスター関連の処理
 │   └── yfinance/    # yfinance関連の処理

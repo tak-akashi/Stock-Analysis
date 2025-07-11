@@ -41,12 +41,12 @@ def mock_db_connections(mocker):
         'Date': pd.to_datetime(pd.date_range(start='2024-01-01', periods=300)),
         'AdjustmentClose': np.linspace(100, 150, 300)
     })
-    mock_df_master = pd.DataFrame({'Code': ["101", "102", "103"]})
+    mock_df_master = pd.DataFrame({'jquants_code': ["101", "102", "103"]})
 
     def mock_read_sql_query(query, conn, params=None, parse_dates=None):
         if "FROM daily_quotes" in query:
             return mock_df_stock
-        elif "FROM master" in query:
+        elif "FROM stocks_master" in query:
             return mock_df_master
         return pd.DataFrame() # Default empty dataframe
 

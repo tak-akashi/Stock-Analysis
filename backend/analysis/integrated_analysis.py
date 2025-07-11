@@ -51,36 +51,36 @@ def get_comprehensive_analysis(date: str, code: Optional[str] = None,
             # Base query for all analysis data
             base_query = """
             SELECT 
-                h.date,
-                h.code,
-                h.hl_ratio,
-                h.weeks as hl_weeks,
-                m.close as minervini_close,
-                m.sma50,
-                m.sma150, 
-                m.sma200,
-                m.type_1 as minervini_type_1,
-                m.type_2 as minervini_type_2,
-                m.type_3 as minervini_type_3,
-                m.type_4 as minervini_type_4,
-                m.type_5 as minervini_type_5,
-                m.type_6 as minervini_type_6,
-                m.type_7 as minervini_type_7,
-                m.type_8 as minervini_type_8,
-                r.relative_strength_percentage,
-                r.relative_strength_index
+                h.Date,
+                h.Code,
+                h.HlRatio,
+                h.Weeks as hl_weeks,
+                m.Close as minervini_close,
+                m.Sma50,
+                m.Sma150, 
+                m.Sma200,
+                m.Type_1 as minervini_type_1,
+                m.Type_2 as minervini_type_2,
+                m.Type_3 as minervini_type_3,
+                m.Type_4 as minervini_type_4,
+                m.Type_5 as minervini_type_5,
+                m.Type_6 as minervini_type_6,
+                m.Type_7 as minervini_type_7,
+                m.Type_8 as minervini_type_8,
+                r.RelativeStrengthPercentage,
+                r.RelativeStrengthIndex
             FROM hl_ratio h
-            LEFT JOIN minervini m ON h.date = m.date AND h.code = m.code
-            LEFT JOIN relative_strength r ON h.date = r.date AND h.code = r.code
-            WHERE h.date = ?
+            LEFT JOIN minervini m ON h.Date = m.Date AND h.Code = m.Code
+            LEFT JOIN relative_strength r ON h.Date = r.Date AND h.Code = r.Code
+            WHERE h.Date = ?
             """
             
             params = [date]
             if code:
-                base_query += " AND h.code = ?"
+                base_query += " AND h.Code = ?"
                 params.append(code)
             
-            base_query += " ORDER BY h.hl_ratio DESC"
+            base_query += " ORDER BY h.HlRatio DESC"
             
             df = pd.read_sql(base_query, conn, params=params)
             
@@ -123,22 +123,22 @@ def get_multi_date_analysis(start_date: str, end_date: str, code: str,
         with sqlite3.connect(db_path) as conn:
             query = """
             SELECT 
-                h.date,
-                h.code,
-                h.hl_ratio,
-                m.close as minervini_close,
-                m.sma50,
-                m.sma150,
-                m.sma200,
-                m.type_1 + m.type_2 + m.type_3 + m.type_4 + m.type_5 + 
-                m.type_6 + m.type_7 + m.type_8 as minervini_score,
-                r.relative_strength_percentage,
-                r.relative_strength_index
+                h.Date,
+                h.Code,
+                h.HlRatio,
+                m.Close as minervini_close,
+                m.Sma50,
+                m.Sma150,
+                m.Sma200,
+                m.Type_1 + m.Type_2 + m.Type_3 + m.Type_4 + m.Type_5 + 
+                m.Type_6 + m.Type_7 + m.Type_8 as minervini_score,
+                r.RelativeStrengthPercentage,
+                r.RelativeStrengthIndex
             FROM hl_ratio h
-            LEFT JOIN minervini m ON h.date = m.date AND h.code = m.code
-            LEFT JOIN relative_strength r ON h.date = r.date AND h.code = r.code
-            WHERE h.code = ? AND h.date BETWEEN ? AND ?
-            ORDER BY h.date ASC
+            LEFT JOIN minervini m ON h.Date = m.Date AND h.Code = m.Code
+            LEFT JOIN relative_strength r ON h.Date = r.Date AND h.Code = r.Code
+            WHERE h.Code = ? AND h.Date BETWEEN ? AND ?
+            ORDER BY h.Date ASC
             """
             
             df = pd.read_sql(query, conn, params=[code, start_date, end_date])
@@ -184,9 +184,9 @@ def get_top_stocks_by_criteria(date: str, criteria: str = 'composite',
     
     # Apply ranking based on criteria
     if criteria == 'hl_ratio':
-        df_ranked = df.sort_values('hl_ratio', ascending=False)
+        df_ranked = df.sort_values('HlRatio', ascending=False)
     elif criteria == 'rsi':
-        df_ranked = df.sort_values('relative_strength_index', ascending=False, na_position='last')
+        df_ranked = df.sort_values('RelativeStrengthIndex', ascending=False, na_position='last')
     elif criteria == 'minervini':
         df_ranked = df.sort_values('minervini_score', ascending=False, na_position='last')
     elif criteria == 'composite':
@@ -227,8 +227,8 @@ def get_stocks_meeting_criteria(date: str, hl_ratio_min: float = 80.0,
     
     # Apply filters
     filtered_df = df[
-        (df['hl_ratio'] >= hl_ratio_min) &
-        (df['relative_strength_index'] >= rsi_min) &
+        (df['HlRatio'] >= hl_ratio_min) &
+        (df['RelativeStrengthIndex'] >= rsi_min) &
         (df['minervini_score'] >= minervini_min)
     ].copy()
     
@@ -256,8 +256,8 @@ def _calculate_composite_scores(df: pd.DataFrame) -> pd.DataFrame:
     df['minervini_score'] = df[minervini_cols].fillna(0).sum(axis=1)
     
     # Normalize scores to 0-100 scale for composite calculation
-    df['hl_ratio_norm'] = df['hl_ratio'].fillna(0)  # Already 0-100
-    df['rsi_norm'] = df['relative_strength_index'].fillna(0)  # Already 0-99, treat as 0-100
+    df['hl_ratio_norm'] = df['HlRatio'].fillna(0)  # Already 0-100
+    df['rsi_norm'] = df['RelativeStrengthIndex'].fillna(0)  # Already 0-99, treat as 0-100
     df['minervini_norm'] = (df['minervini_score'] / 8.0) * 100  # Convert 0-8 to 0-100
     
     # Calculate composite score (weighted average)
@@ -296,12 +296,12 @@ def create_analysis_summary(date: str, db_path: str = RESULTS_DB_PATH) -> Dict[s
     
     summary = {
         'total_stocks': len(df),
-        'avg_hl_ratio': df['hl_ratio'].mean(),
-        'avg_rsi': df['relative_strength_index'].mean(),
+        'avg_hl_ratio': df['HlRatio'].mean(),
+        'avg_rsi': df['RelativeStrengthIndex'].mean(),
         'avg_minervini_score': df['minervini_score'].mean(),
         'avg_composite_score': df['composite_score'].mean(),
-        'high_hl_ratio_count': len(df[df['hl_ratio'] >= 80]),
-        'high_rsi_count': len(df[df['relative_strength_index'] >= 70]),
+        'high_hl_ratio_count': len(df[df['HlRatio'] >= 80]),
+        'high_rsi_count': len(df[df['RelativeStrengthIndex'] >= 70]),
         'strong_minervini_count': len(df[df['minervini_score'] >= 5]),
         'strong_composite_count': len(df[df['composite_score'] >= 70])
     }
@@ -331,14 +331,14 @@ def check_database_coverage(db_path: str = RESULTS_DB_PATH) -> Dict[str, int]:
             rs_count = conn.execute("SELECT COUNT(*) FROM relative_strength").fetchone()[0]
             
             # Get unique dates
-            hl_dates = conn.execute("SELECT COUNT(DISTINCT date) FROM hl_ratio").fetchone()[0]
-            minervini_dates = conn.execute("SELECT COUNT(DISTINCT date) FROM minervini").fetchone()[0]
-            rs_dates = conn.execute("SELECT COUNT(DISTINCT date) FROM relative_strength").fetchone()[0]
+            hl_dates = conn.execute("SELECT COUNT(DISTINCT Date) FROM hl_ratio").fetchone()[0]
+            minervini_dates = conn.execute("SELECT COUNT(DISTINCT Date) FROM minervini").fetchone()[0]
+            rs_dates = conn.execute("SELECT COUNT(DISTINCT Date) FROM relative_strength").fetchone()[0]
             
             # Get unique codes
-            hl_codes = conn.execute("SELECT COUNT(DISTINCT code) FROM hl_ratio").fetchone()[0]
-            minervini_codes = conn.execute("SELECT COUNT(DISTINCT code) FROM minervini").fetchone()[0]
-            rs_codes = conn.execute("SELECT COUNT(DISTINCT code) FROM relative_strength").fetchone()[0]
+            hl_codes = conn.execute("SELECT COUNT(DISTINCT Code) FROM hl_ratio").fetchone()[0]
+            minervini_codes = conn.execute("SELECT COUNT(DISTINCT Code) FROM minervini").fetchone()[0]
+            rs_codes = conn.execute("SELECT COUNT(DISTINCT Code) FROM relative_strength").fetchone()[0]
             
         coverage = {
             'hl_ratio_records': hl_count,

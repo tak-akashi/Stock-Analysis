@@ -41,11 +41,11 @@ def init_hl_ratio_db(db_path=RESULTS_DB_PATH):
         cursor = conn.cursor()
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS hl_ratio (
-            date TEXT NOT NULL,
-            code TEXT NOT NULL,
-            hl_ratio REAL NOT NULL,
-            weeks INTEGER NOT NULL,
-            PRIMARY KEY (date, code, weeks)
+            Date TEXT NOT NULL,
+            Code TEXT NOT NULL,
+            HlRatio REAL NOT NULL,
+            Weeks INTEGER NOT NULL,
+            PRIMARY KEY (Date, Code)
         )
         """)
         conn.commit()
@@ -59,9 +59,9 @@ def calc_hl_ratio(price_df, weeks=52):
     days = weeks * 5
     
     # Adapt column names to match jquants database schema
-    high_col = 'High' if 'High' in price_df.columns else 'high'
-    low_col = 'Low' if 'Low' in price_df.columns else 'low'
-    close_col = 'AdjustmentClose' if 'AdjustmentClose' in price_df.columns else 'close'
+    high_col = 'High'
+    low_col = 'Low'
+    close_col = 'AdjustmentClose' if 'AdjustmentClose' in price_df.columns else 'Close'
     
     highest_price = price_df[high_col][-days:].astype('float').max()
     lowest_price = price_df[low_col][-days:].astype('float').min()
@@ -77,28 +77,30 @@ def calc_hl_ratio(price_df, weeks=52):
 
 
 def calc_hl_ratio_for_all(db_path=JQUANTS_DB_PATH, end_date=None, weeks=52):
-    """Calculate HL ratio for all stocks in the database"""
-    logger = setup_logging()
-    
+    """
+    Calculate HL ratio for all stocks in the database and return a DataFrame.
+    This function focuses on calculation only and does not handle DB writing.
+    """
+    logger = logging.getLogger(__name__)
+
     if end_date is None:
         end_date = datetime.datetime.today().strftime('%Y-%m-%d')
-    
+
     if isinstance(end_date, str):
         end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d')
-    
+
     buffers = 30
     start_date = end_date - relativedelta(days=weeks * 7 + buffers)
-    
+
     logger.info(f"Calculating HL ratio for all stocks from {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
-    
+
     try:
         with sqlite3.connect(db_path) as conn:
-            # Adapt to jquants database schema
             price_df = pd.read_sql(
                 """
                 SELECT Date, Code, High, Low, AdjustmentClose
                 FROM daily_quotes
-                WHERE Date BETWEEN ? AND ? 
+                WHERE Date BETWEEN ? AND ?
                 ORDER BY Date
                 """,
                 conn,
@@ -106,16 +108,16 @@ def calc_hl_ratio_for_all(db_path=JQUANTS_DB_PATH, end_date=None, weeks=52):
                 parse_dates=['Date']
             )
     except sqlite3.Error as e:
-        logger.error(f"Database error: {e}")
+        logger.error(f"Database error while reading daily_quotes: {e}")
         raise
-    
+
     price_df = price_df.replace('', np.nan)
     code_list = price_df['Code'].sort_values().unique()
     ratio_dict = dict()
     errors = []
-    
-    logger.info(f"Processing {len(code_list)} stocks")
-    
+
+    logger.info(f"Processing {len(code_list)} stocks for HL Ratio.")
+
     for i, code in enumerate(code_list):
         try:
             df = price_df[price_df['Code'] == code].set_index('Date')
@@ -125,52 +127,27 @@ def calc_hl_ratio_for_all(db_path=JQUANTS_DB_PATH, end_date=None, weeks=52):
             df = df.ffill()
             ratio = calc_hl_ratio(df, weeks)
             ratio_dict[code] = ratio
-            
+
             if (i + 1) % 100 == 0:
-                logger.info(f"Processed {i + 1}/{len(code_list)} stocks")
-                
+                logger.info(f"Processed {i + 1}/{len(code_list)} stocks for HL Ratio")
+
         except Exception as e:
-            logger.error(f"Error processing {code}: {e}")
+            logger.error(f"Error processing HL Ratio for {code}: {e}")
             errors.append([code, str(e)])
-    
-    ratio_df = pd.DataFrame(list(ratio_dict.items()), columns=['code', 'hl_ratio'])
-    ratio_df = ratio_df.sort_values('hl_ratio', ascending=False).reset_index(drop=True)
-    ratio_df['date'] = end_date.strftime('%Y-%m-%d')
-    ratio_df['weeks'] = weeks
-    
-    # Initialize database if it doesn't exist
-    init_hl_ratio_db()
-    
-    # Save results to database
-    try:
-        with sqlite3.connect(RESULTS_DB_PATH) as result_conn:
-            for _, row in ratio_df.iterrows():
-                try:
-                    sql = """
-                    INSERT OR REPLACE INTO hl_ratio(date, code, hl_ratio, weeks)
-                    VALUES(?,?,?,?)
-                    """
-                    result_conn.execute(sql, (row['date'], row['code'], row['hl_ratio'], row['weeks']))
-                except Exception as e:
-                    logger.error(f"Error saving {row['code']}: {e}")
-                    errors.append([row['code'], str(e)])
-        logger.info(f"Results saved to database: {len(ratio_dict)} records")
-    except Exception as e:
-        logger.error(f"Database save error: {e}")
-        # Fallback to CSV if database fails
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-        output_file = os.path.join(OUTPUT_DIR, f"hl_ratio_{end_date.strftime('%Y%m%d')}.csv")
-        ratio_df.to_csv(output_file, index=False)
-        logger.warning(f"Fallback: Results saved to {output_file}")
-    
+
+    if not ratio_dict:
+        logger.warning("No HL ratios were calculated.")
+        return pd.DataFrame()
+
+    ratio_df = pd.DataFrame(list(ratio_dict.items()), columns=['Code', 'HlRatio'])
+    ratio_df = ratio_df.sort_values('HlRatio', ascending=False).reset_index(drop=True)
+    ratio_df['Date'] = end_date.strftime('%Y-%m-%d')
+    ratio_df['Weeks'] = weeks
+
     if errors:
-        os.makedirs(OUTPUT_DIR, exist_ok=True)
-        error_file = os.path.join(OUTPUT_DIR, f"errors_hl_ratio_{end_date.strftime('%Y%m%d')}.csv")
-        errors_df = pd.DataFrame(errors, columns=['code', 'error'])
-        errors_df.to_csv(error_file, index=False)
-        logger.warning(f"Errors logged to {error_file}")
-    
-    logger.info(f"HL ratio calculation completed. Processed {len(ratio_dict)} stocks successfully")
+        logger.warning(f"Encountered {len(errors)} errors during HL ratio calculation.")
+
+    logger.info(f"HL ratio calculation completed. Calculated for {len(ratio_dict)} stocks.")
     return ratio_df
 
 
@@ -224,7 +201,7 @@ def calc_hl_ratio_by_code(code, db_path=JQUANTS_DB_PATH, end_date=None, weeks=52
                 init_hl_ratio_db()
                 with sqlite3.connect(RESULTS_DB_PATH) as result_conn:
                     sql = """
-                    INSERT OR REPLACE INTO hl_ratio(date, code, hl_ratio, weeks)
+                    INSERT OR REPLACE INTO hl_ratio(Date, Code, HlRatio, Weeks)
                     VALUES(?,?,?,?)
                     """
                     result_conn.execute(sql, (end_date.strftime('%Y-%m-%d'), code, ratio, weeks))

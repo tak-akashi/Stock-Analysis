@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import logging
 import os
+import logging
 import sqlite3
 import warnings
 from datetime import datetime, timedelta
@@ -178,19 +178,19 @@ class MinerviniAnalyzer:
         sma50, sma150, sma200, type_1, type_2, type_3, type_4, type_5, type_6, type_7, type_8 = results
 
         data = {
-            'code': code_array,
-            'close': close_array,
-            'sma50': sma50,
-            'sma150': sma150,
-            'sma200': sma200,
-            'type_1': type_1.astype(float),
-            'type_2': type_2.astype(float),
-            'type_3': type_3,
-            'type_4': type_4.astype(float),
-            'type_5': type_5.astype(float),
-            'type_6': type_6,
-            'type_7': type_7,
-            'type_8': type_8
+            'Code': code_array,
+            'Close': close_array,
+            'Sma50': sma50,
+            'Sma150': sma150,
+            'Sma200': sma200,
+            'Type_1': type_1.astype(float),
+            'Type_2': type_2.astype(float),
+            'Type_3': type_3,
+            'Type_4': type_4.astype(float),
+            'Type_5': type_5.astype(float),
+            'Type_6': type_6,
+            'Type_7': type_7,
+            'Type_8': type_8
         }
         
         return pd.DataFrame(data, index=date_index)
@@ -204,13 +204,13 @@ class MinerviniDatabase:
         self.analyzer = analyzer
         self.logger = logging.getLogger(__name__)
     
-    def init_database(self, conn: sqlite3.Connection, code_list: List[str]) -> None:
+    def init_database(self, source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection, code_list: List[str]) -> None:
         """Initialize Minervini database with historical data."""
         errors = []
         
         for i, code in enumerate(code_list):
             try:
-                stock_data = self._fetch_stock_data(conn, code)
+                stock_data = self._fetch_stock_data(source_conn, code)
                 if stock_data is None:
                     continue
                     
@@ -218,8 +218,8 @@ class MinerviniDatabase:
                 
                 if len(close_array) >= 260:
                     df = self.analyzer.make_dataframe(code_array, date_index, close_array)
-                    df.to_sql('minervini', conn, schema=None, if_exists='append',
-                              index_label='date', method='multi')
+                    df.to_sql('minervini', dest_conn, schema=None, if_exists='append',
+                              index_label='Date', method='multi')
                 
                 if (i + 1) % 100 == 0:
                     self.logger.info(f'{i + 1} stocks - code {code} finished.')
@@ -234,22 +234,22 @@ class MinerviniDatabase:
         """Fetch stock data for a given code."""
         try:
             data = pd.read_sql(
-                'SELECT code, date, close '
-                'FROM prices '
-                'WHERE code = ? '
-                'ORDER BY date',
+                'SELECT Code, Date, AdjustmentClose '
+                'FROM daily_quotes '
+                'WHERE Code = ? '
+                'ORDER BY Date',
                 conn,
                 params=(code,),
-                parse_dates=('date',),
-                index_col='date'
+                parse_dates=('Date',),
+                index_col='Date'
             )
             
             if data.empty:
                 return None
             
             date_index = data.index
-            code_array = data['code'].values
-            close_array = data['close'].apply(
+            code_array = data['Code'].values
+            close_array = data['AdjustmentClose'].apply(
                 lambda x: np.nan if x == '' else x
             ).ffill().values
             
@@ -262,20 +262,20 @@ class MinerviniDatabase:
     def _save_errors(self, errors: List, filename: str) -> None:
         """Save errors to CSV file."""
         if errors:
-            error_df = pd.DataFrame(errors, columns=['code', 'error'])
+            error_df = pd.DataFrame(errors, columns=['Code', 'Error'])
             error_path = self.config.error_output_dir / filename
             error_df.to_csv(error_path, index=False)
             self.logger.info(f"Saved {len(errors)} errors to {error_path}")
 
-    def update_database(self, conn: sqlite3.Connection, code_list: List[str], 
+    def update_database(self, source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection, code_list: List[str],
                        calc_start_date: str, calc_end_date: str, period: int = 5) -> None:
         """Update Minervini database with new data."""
         errors = []
         
-        for code in code_list:
+        for i, code in enumerate(code_list):
             try:
                 stock_data = self._fetch_stock_data_range(
-                    conn, code, calc_start_date, calc_end_date
+                    source_conn, code, calc_start_date, calc_end_date
                 )
                 if stock_data is None:
                     continue
@@ -284,9 +284,13 @@ class MinerviniDatabase:
                 
                 if len(close_array) >= 260:
                     df = self.analyzer.make_dataframe(code_array, date_index, close_array)
-                    df = df.reset_index().rename(columns={'index': 'date'})
+                    df = df.reset_index().rename(columns={'index': 'Date'})
                     
-                    self._insert_recent_data(conn, df, period, errors)
+                    self._insert_recent_data(dest_conn, df, period, errors)
+
+                # 100件ごとに進捗をログ出力
+                if (i + 1) % 100 == 0:
+                    self.logger.info(f"Updated {i + 1}/{len(code_list)} stocks. Last processed code: {code}")
                     
             except Exception as e:
                 self.logger.error(f"Error updating code {code}: {e}")
@@ -299,23 +303,23 @@ class MinerviniDatabase:
         """Fetch stock data for a given code and date range."""
         try:
             data = pd.read_sql(
-                'SELECT code, date, close '
-                'FROM prices '
-                'WHERE code = ? '
-                'AND date BETWEEN ? AND ? '
-                'ORDER BY date',
+                'SELECT Code, Date, AdjustmentClose '
+                'FROM daily_quotes '
+                'WHERE Code = ? '
+                'AND Date >= ? AND Date <= ? '
+                'ORDER BY Date',
                 conn,
                 params=(code, start_date, end_date),
-                parse_dates=('date',),
-                index_col='date'
+                parse_dates=('Date',),
+                index_col='Date'
             )
             
             if data.empty:
                 return None
             
             date_index = data.index
-            code_array = data['code'].values
-            close_array = data['close'].apply(
+            code_array = data['Code'].values
+            close_array = data['AdjustmentClose'].apply(
                 lambda x: np.nan if x == '' else x
             ).ffill().values
             
@@ -329,8 +333,8 @@ class MinerviniDatabase:
                            period: int, errors: List) -> None:
         """Insert recent data into database."""
         sql = """
-        INSERT INTO minervini(date, code, close, sma50, sma150, sma200, type_1, type_2,
-        type_3, type_4, type_5, type_6, type_7, type_8)
+        INSERT INTO minervini(Date, Code, Close, Sma50, Sma150, Sma200, Type_1, Type_2,
+        Type_3, Type_4, Type_5, Type_6, Type_7, Type_8)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """
         
@@ -338,45 +342,45 @@ class MinerviniDatabase:
             for row in df.tail(period).itertuples():
                 try:
                     params = (
-                        str(row.Index), row.code, row.close, row.sma50, row.sma150, row.sma200,
-                        float(row.type_1), float(row.type_2), row.type_3, float(row.type_4),
-                        float(row.type_5), row.type_6, row.type_7, row.type_8
+                        str(row.Index), row.Code, row.Close, row.Sma50, row.Sma150, row.Sma200,
+                        float(row.Type_1), float(row.Type_2), row.Type_3, float(row.Type_4),
+                        float(row.Type_5), row.Type_6, row.Type_7, row.Type_8
                     )
                     conn.execute(sql, params)
                 except Exception as e:
                     self.logger.error(f"Error inserting row: {e}")
-                    errors.append([row.Index, row.code, str(e)])
+                    errors.append([row.Index, row.Code, str(e)])
 
     def update_type8_by_date(self, conn: sqlite3.Connection, date: str) -> List:
         """Update type 8 (relative strength) for a specific date."""
         try:
             data = pd.read_sql(
                 """
-                SELECT code, date, relative_strength_index 
+                SELECT Code, Date, RelativeStrengthIndex 
                 FROM relative_strength 
-                WHERE date = ?
-                ORDER BY code
+                WHERE Date = ?
+                ORDER BY Code
                 """,
                 conn,
                 params=(date,),
-                parse_dates=('date',),
-                index_col='date'
+                parse_dates=('Date',),
+                index_col='Date'
             )
             
             if data.empty:
                 return []
             
-            data['relative_strength_index'] = data['relative_strength_index'].astype('float')
-            data['type_8'] = data['relative_strength_index'].apply(
+            data['RelativeStrengthIndex'] = data['RelativeStrengthIndex'].astype('float')
+            data['Type_8'] = data['RelativeStrengthIndex'].apply(
                 lambda x: 1.0 if x >= 70 else 0.0 if not np.isnan(x) else np.nan
             )
             data = data.reset_index()
-            data['date'] = data['date'].dt.date
+            data['Date'] = data['Date'].dt.date
 
             errors = []
             sql = """
-             UPDATE minervini SET type_8 = :type_8
-             WHERE code = :code AND date = :date
+             UPDATE minervini SET Type_8 = :Type_8
+             WHERE Code = :Code AND Date = :Date
              """
             
             with conn:
@@ -384,14 +388,14 @@ class MinerviniDatabase:
                 for _, row in data.iterrows():
                     try:
                         params = {
-                            'code': row['code'], 
-                            'date': str(row['date']), 
-                            'type_8': row['type_8']
+                            'Code': row['Code'], 
+                            'Date': str(row['Date']), 
+                            'Type_8': row['Type_8']
                         }
                         conn.execute(sql, params)
                     except Exception as e:
-                        self.logger.error(f"Error updating type_8 for {row['code']}: {e}")
-                        errors.append([row['date'], row['code'], str(e)])
+                        self.logger.error(f"Error updating type_8 for {row['Code']}: {e}")
+                        errors.append([row['Date'], row['Code'], str(e)])
                 conn.commit()
             
             return errors
@@ -415,7 +419,7 @@ class MinerviniDatabase:
                 self.logger.info(f"{i + 1} dates processed - {date} finished.")
         
         if all_errors:
-            error_df = pd.DataFrame(all_errors, columns=['date', 'code', 'error'])
+            error_df = pd.DataFrame(all_errors, columns=['Date', 'Code', 'Error'])
             error_path = self.config.error_output_dir / 'errors_update_type8.csv'
             error_df.to_csv(error_path, index=False)
             self.logger.info(f"Saved {len(all_errors)} errors to {error_path}")
@@ -437,21 +441,21 @@ def make_minervini_df(code_array: np.ndarray, date_index: pd.DatetimeIndex,
     return analyzer.make_dataframe(code_array, date_index, close_array)
 
 
-def init_minervini_db(conn: sqlite3.Connection, code_list: List[str]) -> None:
+def init_minervini_db(source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection, code_list: List[str]) -> None:
     """Backward compatibility function."""
     config = MinerviniConfig()
     analyzer = MinerviniAnalyzer(config)
     database = MinerviniDatabase(config, analyzer)
-    database.init_database(conn, code_list)
+    database.init_database(source_conn, dest_conn, code_list)
 
 
-def update_minervini_db(conn: sqlite3.Connection, code_list: List[str], 
+def update_minervini_db(source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection, code_list: List[str], 
                        calc_start_date: str, calc_end_date: str, period: int = 5) -> None:
     """Backward compatibility function."""
     config = MinerviniConfig()
     analyzer = MinerviniAnalyzer(config)
     database = MinerviniDatabase(config, analyzer)
-    database.update_database(conn, code_list, calc_start_date, calc_end_date, period)
+    database.update_database(source_conn, dest_conn, code_list, calc_start_date, calc_end_date, period)
 
 
 def update_type8_db_by_date(conn: sqlite3.Connection, date: str) -> List:

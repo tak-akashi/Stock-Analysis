@@ -51,15 +51,23 @@ def relative_strength_percentage(close_arr, period=200):
         return np.full(len(close_arr), np.nan)
     
     try:
-        q1 = np.array([((close_arr[idx - int(period * 3 / 4) + 1] - close_arr[idx - period + 1]) /
-                       close_arr[idx - period + 1]) for idx in range(period, len(close_arr))])
-        q2 = np.array([((close_arr[idx - int(period * 2 / 4) + 1] - close_arr[idx - int(period * 3 / 4) + 1]) /
-                       close_arr[idx - int(period * 3 / 4) + 1]) for idx in range(period, len(close_arr))])
-        q3 = np.array([((close_arr[idx - int(period * 1 / 4) + 1] - close_arr[idx - int(period * 2 / 4) + 1]) /
-                       close_arr[idx - int(period * 2 / 4) + 1]) for idx in range(period, len(close_arr))])
-        q4 = np.array([((close_arr[idx] - close_arr[idx - int(period * 1 / 4) + 1]) /
-                       close_arr[idx - int(period * 1 / 4) + 1]) for idx in range(period, len(close_arr))])
-        rsp = ((q1 + q2 + q3) * 0.2 + q4 * 0.4) * 100
+        # Helper function to safely calculate percentage change
+        def safe_pct_change(current, previous):
+            if previous is None or previous == 0 or np.isnan(previous) or current is None or np.isnan(current):
+                return np.nan
+            return (current - previous) / previous
+        
+        q1 = np.array([safe_pct_change(close_arr[idx - int(period * 3 / 4) + 1], close_arr[idx - period + 1]) 
+                       for idx in range(period, len(close_arr))])
+        q2 = np.array([safe_pct_change(close_arr[idx - int(period * 2 / 4) + 1], close_arr[idx - int(period * 3 / 4) + 1]) 
+                       for idx in range(period, len(close_arr))])
+        q3 = np.array([safe_pct_change(close_arr[idx - int(period * 1 / 4) + 1], close_arr[idx - int(period * 2 / 4) + 1]) 
+                       for idx in range(period, len(close_arr))])
+        q4 = np.array([safe_pct_change(close_arr[idx], close_arr[idx - int(period * 1 / 4) + 1]) 
+                       for idx in range(period, len(close_arr))])
+        
+        # Use numpy nanmean to handle NaN values
+        rsp = ((np.nan_to_num(q1, 0) + np.nan_to_num(q2, 0) + np.nan_to_num(q3, 0)) * 0.2 + np.nan_to_num(q4, 0) * 0.4) * 100
         rsp = fill_non_vals(close_arr, rsp, period)
         logger.debug(f"RSP calculation completed for {len(close_arr)} data points")
         return rsp
@@ -110,16 +118,26 @@ def init_rsp_db(db_path=JQUANTS_DB_PATH, result_db_path=RESULTS_DB_PATH):
                 continue
                 
             each_df = each_df.set_index('Date')
-            close = each_df['AdjustmentClose'].replace('', np.nan).ffill().values
+            
+            # Safely process close prices
+            close_series = each_df['AdjustmentClose'].replace('', np.nan).replace('None', np.nan)
+            close_series = pd.to_numeric(close_series, errors='coerce').ffill()
+            close = close_series.values
+            
+            # Skip if all values are NaN
+            if np.all(np.isnan(close)):
+                logger.warning(f"All close prices are NaN for {c}")
+                continue
+                
             rsp = relative_strength_percentage(close)
-            each_df['relative_strength_percentage'] = rsp
-            each_df = each_df[['Code', 'relative_strength_percentage']]
+            each_df['RelativeStrengthPercentage'] = rsp
+            each_df = each_df[['Code', 'RelativeStrengthPercentage']]
             each_df.index = each_df.index.date
             
             try:
                 with sqlite3.connect(result_db_path) as result_conn:
                     each_df.to_sql('relative_strength', result_conn, schema=None, if_exists='append',
-                                   index_label='date', method='multi')
+                                   index_label='Date', method='multi')
                 processed += 1
                 logger.debug(f"Processed {c} successfully")
             except Exception as e:
@@ -153,11 +171,11 @@ def init_results_db(db_path):
         cursor = conn.cursor()
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS relative_strength (
-            date TEXT NOT NULL,
-            code TEXT NOT NULL,
-            relative_strength_percentage REAL,
-            relative_strength_index REAL,
-            PRIMARY KEY (date, code)
+            Date TEXT NOT NULL,
+            Code TEXT NOT NULL,
+            RelativeStrengthPercentage REAL,
+            RelativeStrengthIndex REAL,
+            PRIMARY KEY (Date, Code)
         )
         """)
         conn.commit()
@@ -210,24 +228,34 @@ def update_rsp_db(db_path=JQUANTS_DB_PATH, result_db_path=RESULTS_DB_PATH, calc_
                 continue
                 
             each_df = each_df.set_index('Date')
-            close = each_df['AdjustmentClose'].replace('', np.nan).ffill().values
+            
+            # Safely process close prices
+            close_series = each_df['AdjustmentClose'].replace('', np.nan).replace('None', np.nan)
+            close_series = pd.to_numeric(close_series, errors='coerce').ffill()
+            close = close_series.values
+            
+            # Skip if all values are NaN
+            if np.all(np.isnan(close)):
+                logger.warning(f"All close prices are NaN for {c}")
+                continue
+                
             rsp = relative_strength_percentage(close)
-            each_df['relative_strength_percentage'] = rsp
-            each_df = each_df[['Code', 'relative_strength_percentage']]
-            each_df = each_df.reset_index().rename(columns={'index': 'date'})
-            each_df['date'] = each_df['date'].dt.date
+            each_df['RelativeStrengthPercentage'] = rsp
+            each_df = each_df[['Code', 'RelativeStrengthPercentage']]
+            each_df = each_df.reset_index().rename(columns={'index': 'Date'})
+            each_df['Date'] = each_df['Date'].dt.date
             
             with sqlite3.connect(result_db_path) as result_conn:
                 for _, row in each_df[period:].iterrows():
                     try:
                         sql = """
-                        INSERT OR REPLACE INTO relative_strength(date, code, relative_strength_percentage)
+                        INSERT OR REPLACE INTO relative_strength(Date, Code, RelativeStrengthPercentage)
                         VALUES(?,?,?)
                         """
-                        result_conn.execute(sql, (str(row['date']), row['Code'], row['relative_strength_percentage']))
+                        result_conn.execute(sql, (str(row['Date']), row['Code'], row['RelativeStrengthPercentage']))
                     except Exception as e:
                         logger.error(f"Error inserting data for {c}: {e}")
-                        errors.append([row['date'], c, str(e)])
+                        errors.append([row['Date'], c, str(e)])
             processed += 1
             logger.debug(f"Updated {c} successfully")
             
@@ -240,7 +268,7 @@ def update_rsp_db(db_path=JQUANTS_DB_PATH, result_db_path=RESULTS_DB_PATH, calc_
     
     if errors:
         error_file = os.path.join(OUTPUT_DIR, f"errors_relative_strength_update_{datetime.datetime.now().strftime('%Y%m%d')}.csv")
-        error_df = pd.DataFrame(errors, columns=['date', 'code', 'error'])
+        error_df = pd.DataFrame(errors, columns=['Date', 'Code', 'error'])
         error_df.to_csv(error_file, index=False)
         logger.warning(f"Errors saved to {error_file}")
     
@@ -257,10 +285,10 @@ def update_rsi_db(result_db_path=RESULTS_DB_PATH, date_list=None, period=-5):
         try:
             with sqlite3.connect(result_db_path) as conn:
                 date_df = pd.read_sql(
-                    "SELECT DISTINCT date FROM relative_strength ORDER BY date DESC LIMIT 10",
+                    "SELECT DISTINCT Date FROM relative_strength ORDER BY Date DESC LIMIT 10",
                     conn
                 )
-            date_list = date_df['date'].tolist()
+            date_list = date_df['Date'].tolist()
         except sqlite3.Error as e:
             logger.error(f"Error getting date list: {e}")
             return
@@ -273,38 +301,52 @@ def update_rsi_db(result_db_path=RESULTS_DB_PATH, date_list=None, period=-5):
         try:
             with sqlite3.connect(result_db_path) as conn:
                 each_df = pd.read_sql(
-                    'SELECT code, date, relative_strength_percentage '
+                    'SELECT Code, Date, RelativeStrengthPercentage '
                     'FROM relative_strength '
-                    'WHERE date = ?'
-                    'ORDER BY code',
+                    'WHERE Date = ?'
+                    'ORDER BY Code',
                     conn,
                     params=(date,),
-                    parse_dates=['date']
+                    parse_dates=['Date']
                 )
             
             if each_df.empty:
                 logger.warning(f"No data found for {date}")
                 continue
             
-            each_df['relative_strength_percentage'] = pd.to_numeric(each_df['relative_strength_percentage'], errors='coerce')
-            each_df = each_df.sort_values(by='relative_strength_percentage', ascending=False).reset_index(drop=True)
-            _s = each_df['relative_strength_percentage']
-            each_df['relative_strength_index'] = np.array([x if np.isnan(x) else i for i, x in enumerate(_s)])
-            # 最高が99, 最低が1になるように調整
-            each_df['relative_strength_index'] = each_df['relative_strength_index'].apply(
-                lambda x: 99 - x / len(_s.dropna()) * 99 if not (np.isnan(x)) else x)
+            each_df['RelativeStrengthPercentage'] = pd.to_numeric(each_df['RelativeStrengthPercentage'], errors='coerce')
+            each_df = each_df.sort_values(by='RelativeStrengthPercentage', ascending=False, na_position='last').reset_index(drop=True)
+            
+            # Calculate RSI ranking - highest RSP gets RSI close to 99, lowest gets close to 1
+            valid_count = each_df['RelativeStrengthPercentage'].notna().sum()
+            if valid_count == 0:
+                logger.warning(f"No valid RSP data for {date}")
+                continue
+                
+            each_df['RelativeStrengthIndex'] = np.nan
+            valid_mask = each_df['RelativeStrengthPercentage'].notna()
+            
+            # Assign ranking: top performer gets 99, bottom gets 1
+            valid_indices = each_df[valid_mask].index
+            for rank, idx in enumerate(valid_indices):
+                each_df.loc[idx, 'RelativeStrengthIndex'] = 99 - (rank / (valid_count - 1)) * 98 if valid_count > 1 else 50
             
             with sqlite3.connect(result_db_path) as conn:
+                cursor = conn.cursor()
+                sql = """
+                 UPDATE relative_strength SET RelativeStrengthIndex = ?
+                 WHERE Code = ? AND Date = ?
+                 """
+                
                 for _, row in each_df.iterrows():
                     try:
-                        sql = """
-                         UPDATE relative_strength SET relative_strength_index = ?
-                         WHERE code = ? AND date = ?
-                         """
-                        conn.execute(sql, (row['relative_strength_index'], row['code'], str(row['date'].date())))
+                        if pd.notna(row['RelativeStrengthIndex']):
+                            cursor.execute(sql, (row['RelativeStrengthIndex'], row['Code'], str(row['Date'].date())))
                     except Exception as e:
-                        logger.error(f"Error updating RSI for {row['code']} on {date}: {e}")
-                        errors.append([date, row['code'], str(e)])
+                        logger.error(f"Error updating RSI for {row['Code']} on {date}: {e}")
+                        errors.append([date, row['Code'], str(e)])
+                
+                conn.commit()  # Ensure changes are committed
             
             logger.info(f"Updated RSI for {len(each_df)} stocks on {date}")
             
@@ -317,7 +359,7 @@ def update_rsi_db(result_db_path=RESULTS_DB_PATH, date_list=None, period=-5):
     
     if errors:
         error_file = os.path.join(OUTPUT_DIR, f"errors_rsi_update_{datetime.datetime.now().strftime('%Y%m%d')}.csv")
-        error_df = pd.DataFrame(errors, columns=['date', 'code', 'error'])
+        error_df = pd.DataFrame(errors, columns=['Date', 'Code', 'error'])
         error_df.to_csv(error_file, index=False)
         logger.warning(f"Errors saved to {error_file}")
     

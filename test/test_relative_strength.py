@@ -62,11 +62,11 @@ class TestRelativeStrength:
         
         conn.execute("""
         CREATE TABLE relative_strength (
-            date TEXT,
-            code TEXT,
-            relative_strength_percentage REAL,
-            relative_strength_index REAL,
-            PRIMARY KEY (date, code)
+            Date TEXT,
+            Code TEXT,
+            RelativeStrengthPercentage REAL,
+            RelativeStrengthIndex REAL,
+            PRIMARY KEY (Date, Code)
         )
         """)
         
@@ -227,7 +227,7 @@ class TestRelativeStrength:
             # Check table structure
             columns = conn.execute("PRAGMA table_info(relative_strength)").fetchall()
             column_names = [col[1] for col in columns]
-            expected_columns = ['date', 'code', 'relative_strength_percentage', 'relative_strength_index']
+            expected_columns = ['Date', 'Code', 'RelativeStrengthPercentage', 'RelativeStrengthIndex']
             assert all(col in column_names for col in expected_columns)
             
             conn.close()
@@ -292,7 +292,7 @@ class TestRelativeStrength:
             for i, code in enumerate(codes):
                 rsp = np.random.uniform(-10, 10)  # Random RSP values
                 conn.execute("""
-                INSERT INTO relative_strength (date, code, relative_strength_percentage)
+                INSERT INTO relative_strength (Date, Code, RelativeStrengthPercentage)
                 VALUES (?, ?, ?)
                 """, (date, code, rsp))
         
@@ -309,10 +309,10 @@ class TestRelativeStrength:
             # Check that RSI values were calculated and stored
             conn = sqlite3.connect(temp_results_database)
             rsi_data = conn.execute("""
-            SELECT date, code, relative_strength_index 
+            SELECT Date, Code, RelativeStrengthIndex 
             FROM relative_strength 
-            WHERE relative_strength_index IS NOT NULL
-            ORDER BY date, code
+            WHERE RelativeStrengthIndex IS NOT NULL
+            ORDER BY Date, Code
             """).fetchall()
             
             # Should have RSI values for all entries
@@ -349,7 +349,7 @@ class TestRelativeStrength:
         # Insert some test data first
         conn = sqlite3.connect(temp_results_database)
         conn.execute("""
-        INSERT INTO relative_strength (date, code, relative_strength_percentage)
+        INSERT INTO relative_strength (Date, Code, RelativeStrengthPercentage)
         VALUES ('2023-12-01', '1001', 5.5)
         """)
         conn.commit()
@@ -376,7 +376,7 @@ class TestRelativeStrength:
         
         for code, rsp in test_data:
             conn.execute("""
-            INSERT INTO relative_strength (date, code, relative_strength_percentage)
+            INSERT INTO relative_strength (Date, Code, RelativeStrengthPercentage)
             VALUES (?, ?, ?)
             """, (test_date, code, rsp))
         
@@ -391,10 +391,10 @@ class TestRelativeStrength:
         # Check RSI rankings
         conn = sqlite3.connect(temp_results_database)
         results = conn.execute("""
-        SELECT code, relative_strength_percentage, relative_strength_index 
+        SELECT Code, RelativeStrengthPercentage, RelativeStrengthIndex 
         FROM relative_strength 
-        WHERE date = ?
-        ORDER BY relative_strength_percentage DESC
+        WHERE Date = ?
+        ORDER BY RelativeStrengthPercentage DESC
         """, (test_date,)).fetchall()
         
         assert len(results) == 3

@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch, MagicMock
 import pandas as pd
 from datetime import datetime
 
-from backend.agent.data_processor import (
+from backend.yfinance.data_processor import (
     init_db,
     save_stock_info_to_db,
     download_tse_listed_stocks,
@@ -120,7 +120,7 @@ class TestDatabaseFunctions:
             'revenueGrowth': 0.08
         }
         
-        with patch('backend.agent.data_processor.DB_PATH', self.test_db_path):
+        with patch('backend.yfinance.data_processor.DB_PATH', self.test_db_path):
             save_stock_info_to_db(mock_info)
         
         # Verify data was saved
@@ -146,7 +146,7 @@ class TestDatabaseFunctions:
             'longName': 'Minimal Company'
         }
         
-        with patch('backend.agent.data_processor.DB_PATH', self.test_db_path):
+        with patch('backend.yfinance.data_processor.DB_PATH', self.test_db_path):
             save_stock_info_to_db(mock_info)
         
         # Verify data was saved with None values for missing fields
@@ -176,7 +176,7 @@ class TestDataFetching:
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
     
-    @patch('backend.agent.data_processor.requests.get')
+    @patch('backend.yfinance.data_processor.requests.get')
     def test_download_tse_listed_stocks_success(self, mock_get):
         """Test successful download of TSE listed stocks."""
         # Mock the webpage response
@@ -198,28 +198,28 @@ class TestDataFetching:
         
         mock_get.side_effect = [mock_response, mock_excel_response]
         
-        with patch('backend.agent.data_processor.DATA_DIR', self.temp_dir):
+        with patch('backend.yfinance.data_processor.DATA_DIR', self.temp_dir):
             result = download_tse_listed_stocks()
         
         assert result is not None
         assert result.endswith('tse_listed_stocks.xlsx')
         assert os.path.exists(result)
     
-    @patch('backend.agent.data_processor.requests.get')
+    @patch('backend.yfinance.data_processor.requests.get')
     def test_download_tse_listed_stocks_failure(self, mock_get):
         """Test handling of download failure."""
         import requests
         mock_get.side_effect = requests.exceptions.RequestException("Network error")
         
-        with patch('backend.agent.data_processor.DATA_DIR', self.temp_dir):
+        with patch('backend.yfinance.data_processor.DATA_DIR', self.temp_dir):
             result = download_tse_listed_stocks()
         
         assert result is None
     
-    @patch('backend.agent.data_processor.download_tse_listed_stocks')
-    @patch('backend.agent.data_processor.save_stock_info_to_db')
-    @patch('backend.agent.data_processor.yf.Ticker')
-    @patch('backend.agent.data_processor.pd.read_excel')
+    @patch('backend.yfinance.data_processor.download_tse_listed_stocks')
+    @patch('backend.yfinance.data_processor.save_stock_info_to_db')
+    @patch('backend.yfinance.data_processor.yf.Ticker')
+    @patch('backend.yfinance.data_processor.pd.read_excel')
     def test_fetch_and_store_tse_data(self, mock_read_excel, mock_ticker, mock_save, mock_download):
         """Test fetching and storing TSE data."""
         # Mock the Excel file download
@@ -243,13 +243,13 @@ class TestDataFetching:
         }
         mock_ticker.return_value = mock_ticker_instance
         
-        with patch('backend.agent.data_processor.time.sleep'):  # Skip sleep for testing
+        with patch('backend.yfinance.data_processor.time.sleep'):  # Skip sleep for testing
             fetch_and_store_tse_data(max_workers=1, delay=0)
         
         # Verify that save_stock_info_to_db was called
         assert mock_save.call_count == 2  # Called for both stocks
     
-    @patch('backend.agent.data_processor.download_tse_listed_stocks')
+    @patch('backend.yfinance.data_processor.download_tse_listed_stocks')
     def test_fetch_and_store_tse_data_no_file(self, mock_download):
         """Test handling when Excel file download fails."""
         mock_download.return_value = None
@@ -273,8 +273,8 @@ class TestTSEDataProcessor:
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
     
-    @patch('backend.agent.data_processor.init_db')
-    @patch('backend.agent.data_processor.os.makedirs')
+    @patch('backend.yfinance.data_processor.init_db')
+    @patch('backend.yfinance.data_processor.os.makedirs')
     def test_tse_data_processor_init(self, mock_makedirs, mock_init_db):
         """Test TSEDataProcessor initialization."""
         processor = TSEDataProcessor(max_workers=2, rate_limit_delay=0.5)
@@ -286,10 +286,10 @@ class TestTSEDataProcessor:
         mock_makedirs.assert_called_once()
         mock_init_db.assert_called_once()
     
-    @patch('backend.agent.data_processor.fetch_and_store_tse_data')
+    @patch('backend.yfinance.data_processor.fetch_and_store_tse_data')
     def test_tse_data_processor_run(self, mock_fetch):
         """Test TSEDataProcessor run method."""
-        with patch('backend.agent.data_processor.init_db'), patch('backend.agent.data_processor.os.makedirs'):
+        with patch('backend.yfinance.data_processor.init_db'), patch('backend.yfinance.data_processor.os.makedirs'):
             processor = TSEDataProcessor(max_workers=2, rate_limit_delay=0.5)
             processor.run()
         
@@ -310,9 +310,9 @@ class TestIntegration:
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
     
-    @patch('backend.agent.data_processor.download_tse_listed_stocks')
-    @patch('backend.agent.data_processor.yf.Ticker')
-    @patch('backend.agent.data_processor.pd.read_excel')
+    @patch('backend.yfinance.data_processor.download_tse_listed_stocks')
+    @patch('backend.yfinance.data_processor.yf.Ticker')
+    @patch('backend.yfinance.data_processor.pd.read_excel')
     def test_complete_workflow(self, mock_read_excel, mock_ticker, mock_download):
         """Test the complete workflow from initialization to data storage."""
         # Mock the Excel file download
@@ -338,9 +338,9 @@ class TestIntegration:
         }
         mock_ticker.return_value = mock_ticker_instance
         
-        with patch('backend.agent.data_processor.DATA_DIR', self.temp_dir):
-            with patch('backend.agent.data_processor.DB_PATH', self.test_db_path):
-                with patch('backend.agent.data_processor.time.sleep'):  # Skip sleep for testing
+        with patch('backend.yfinance.data_processor.DATA_DIR', self.temp_dir):
+            with patch('backend.yfinance.data_processor.DB_PATH', self.test_db_path):
+                with patch('backend.yfinance.data_processor.time.sleep'):  # Skip sleep for testing
                     processor = TSEDataProcessor(max_workers=1, rate_limit_delay=0)
                     processor.run()
         

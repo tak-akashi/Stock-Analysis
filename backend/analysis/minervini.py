@@ -104,6 +104,9 @@ class MinerviniAnalyzer:
             type_7: 現在の株価は52週高値から少なくとも25％以内にあるか
             type_8: レラティブストレングスのランキングは70％以上か（別途算出）
         """
+        # Ensure close_arr is a numpy array to avoid pandas Series indexing warnings
+        close_arr = np.array(close_arr)
+        
         sma50, sma150, sma200 = self._calculate_moving_averages(close_arr)
         
         # Calculate each type of criteria
@@ -121,9 +124,9 @@ class MinerviniAnalyzer:
     def _calculate_moving_averages(self, close_arr: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """Calculate moving averages using talib or simple implementation."""
         if HAS_TALIB:
-            sma50 = talib.SMA(close_arr, timeperiod=50)
-            sma150 = talib.SMA(close_arr, timeperiod=150)
-            sma200 = talib.SMA(close_arr, timeperiod=200)
+            sma50 = np.array(talib.SMA(close_arr, timeperiod=50))
+            sma150 = np.array(talib.SMA(close_arr, timeperiod=150))
+            sma200 = np.array(talib.SMA(close_arr, timeperiod=200))
         else:
             self.logger.debug("Using simple moving average implementation")
             sma50 = simple_sma(close_arr, 50)
@@ -251,7 +254,7 @@ class MinerviniDatabase:
             code_array = data['Code'].values
             close_array = data['AdjustmentClose'].apply(
                 lambda x: np.nan if x == '' else x
-            ).ffill().values
+            ).ffill().astype(np.float64)
             
             return date_index, code_array, close_array
             
@@ -321,7 +324,7 @@ class MinerviniDatabase:
             code_array = data['Code'].values
             close_array = data['AdjustmentClose'].apply(
                 lambda x: np.nan if x == '' else x
-            ).ffill().values
+            ).ffill().astype(np.float64)
             
             return date_index, code_array, close_array
             
@@ -333,7 +336,7 @@ class MinerviniDatabase:
                            period: int, errors: List) -> None:
         """Insert recent data into database."""
         sql = """
-        INSERT INTO minervini(Date, Code, Close, Sma50, Sma150, Sma200, Type_1, Type_2,
+        INSERT OR REPLACE INTO minervini(Date, Code, Close, Sma50, Sma150, Sma200, Type_1, Type_2,
         Type_3, Type_4, Type_5, Type_6, Type_7, Type_8)
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """
@@ -342,33 +345,40 @@ class MinerviniDatabase:
             for row in df.tail(period).itertuples():
                 try:
                     params = (
-                        str(row.Index), row.Code, row.Close, row.Sma50, row.Sma150, row.Sma200,
+                        str(row.Date), row.Code, row.Close, row.Sma50, row.Sma150, row.Sma200,
                         float(row.Type_1), float(row.Type_2), row.Type_3, float(row.Type_4),
                         float(row.Type_5), row.Type_6, row.Type_7, row.Type_8
                     )
                     conn.execute(sql, params)
                 except Exception as e:
                     self.logger.error(f"Error inserting row: {e}")
-                    errors.append([row.Index, row.Code, str(e)])
+                    errors.append([row.Date, row.Code, str(e)])
 
     def update_type8_by_date(self, conn: sqlite3.Connection, date: str) -> List:
         """Update type 8 (relative strength) for a specific date."""
         try:
+            # Handle date format normalization - extract just the date part
+            date_part = date.split()[0] if ' ' in date else date
+            
+            # Query with flexible date matching
             data = pd.read_sql(
                 """
                 SELECT Code, Date, RelativeStrengthIndex 
                 FROM relative_strength 
-                WHERE Date = ?
+                WHERE Date = ? OR Date = ? OR Date LIKE ?
                 ORDER BY Code
                 """,
                 conn,
-                params=(date,),
+                params=(date, date_part, date_part + '%'),
                 parse_dates=('Date',),
                 index_col='Date'
             )
             
             if data.empty:
+                self.logger.warning(f"No relative strength data found for date {date}")
                 return []
+            
+            self.logger.info(f"Processing Type_8 update for {len(data)} stocks on {date}")
             
             data['RelativeStrengthIndex'] = data['RelativeStrengthIndex'].astype('float')
             data['Type_8'] = data['RelativeStrengthIndex'].apply(
@@ -378,25 +388,48 @@ class MinerviniDatabase:
             data['Date'] = data['Date'].dt.date
 
             errors = []
+            updated_count = 0
             sql = """
-             UPDATE minervini SET Type_8 = :Type_8
-             WHERE Code = :Code AND Date = :Date
+             UPDATE minervini SET Type_8 = ?
+             WHERE Code = ? AND (
+                 Date = ? OR 
+                 Date = ? OR 
+                 Date LIKE ? OR 
+                 substr(Date, 1, 10) = ?
+             )
              """
             
             with conn:
                 conn.execute('BEGIN TRANSACTION')
-                for _, row in data.iterrows():
+                for i, (_, row) in enumerate(data.iterrows()):
                     try:
-                        params = {
-                            'Code': row['Code'], 
-                            'Date': str(row['Date']), 
-                            'Type_8': row['Type_8']
-                        }
-                        conn.execute(sql, params)
+                        # Normalize date formats for better matching
+                        date_str = str(row['Date'])
+                        date_only = date_str.split()[0] if ' ' in date_str else date_str
+                        date_pattern = date_only + '%'
+                        
+                        # Try multiple date format variations for better matching
+                        result = conn.execute(sql, (
+                            row['Type_8'], row['Code'], 
+                            date_str, date_only, date_pattern, date_only
+                        ))
+                        
+                        if result.rowcount == 0:
+                            self.logger.warning(f"No minervini records updated for {row['Code']} on {date_only}")
+                        else:
+                            updated_count += result.rowcount
+                            self.logger.debug(f"Updated {result.rowcount} records for {row['Code']} on {date_only}")
+                        
+                        # Progress report every 100 stocks
+                        if (i + 1) % 100 == 0:
+                            self.logger.info(f"Type_8 update progress: {i + 1}/{len(data)} stocks processed")
+                            
                     except Exception as e:
                         self.logger.error(f"Error updating type_8 for {row['Code']}: {e}")
                         errors.append([row['Date'], row['Code'], str(e)])
                 conn.commit()
+            
+            self.logger.info(f"Type_8 update completed: {updated_count} records updated, {len(errors)} errors for date {date}")
             
             return errors
             

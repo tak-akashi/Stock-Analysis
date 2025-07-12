@@ -54,25 +54,27 @@ def get_comprehensive_analysis(date: str, code: Optional[str] = None,
                 h.Date,
                 h.Code,
                 h.HlRatio,
+                h.MedianRatio,
                 h.Weeks as hl_weeks,
-                m.Close as minervini_close,
-                m.Sma50,
-                m.Sma150, 
-                m.Sma200,
-                m.Type_1 as minervini_type_1,
-                m.Type_2 as minervini_type_2,
-                m.Type_3 as minervini_type_3,
-                m.Type_4 as minervini_type_4,
-                m.Type_5 as minervini_type_5,
-                m.Type_6 as minervini_type_6,
-                m.Type_7 as minervini_type_7,
-                m.Type_8 as minervini_type_8,
-                r.RelativeStrengthPercentage,
-                r.RelativeStrengthIndex
+                MAX(m.Close) as minervini_close,
+                MAX(m.Sma50) as Sma50,
+                MAX(m.Sma150) as Sma150, 
+                MAX(m.Sma200) as Sma200,
+                MAX(m.Type_1) as minervini_type_1,
+                MAX(m.Type_2) as minervini_type_2,
+                MAX(m.Type_3) as minervini_type_3,
+                MAX(m.Type_4) as minervini_type_4,
+                MAX(m.Type_5) as minervini_type_5,
+                MAX(m.Type_6) as minervini_type_6,
+                MAX(m.Type_7) as minervini_type_7,
+                MAX(m.Type_8) as minervini_type_8,
+                MAX(r.RelativeStrengthPercentage) as RelativeStrengthPercentage,
+                MAX(r.RelativeStrengthIndex) as RelativeStrengthIndex
             FROM hl_ratio h
-            LEFT JOIN minervini m ON h.Date = m.Date AND h.Code = m.Code
-            LEFT JOIN relative_strength r ON h.Date = r.Date AND h.Code = r.Code
+            LEFT JOIN minervini m ON substr(m.Date, 1, 10) = h.Date AND h.Code = m.Code
+            LEFT JOIN relative_strength r ON substr(r.Date, 1, 10) = h.Date AND h.Code = r.Code
             WHERE h.Date = ?
+            GROUP BY h.Date, h.Code, h.HlRatio, h.MedianRatio, h.Weeks
             """
             
             params = [date]
@@ -126,18 +128,19 @@ def get_multi_date_analysis(start_date: str, end_date: str, code: str,
                 h.Date,
                 h.Code,
                 h.HlRatio,
-                m.Close as minervini_close,
-                m.Sma50,
-                m.Sma150,
-                m.Sma200,
-                m.Type_1 + m.Type_2 + m.Type_3 + m.Type_4 + m.Type_5 + 
-                m.Type_6 + m.Type_7 + m.Type_8 as minervini_score,
-                r.RelativeStrengthPercentage,
-                r.RelativeStrengthIndex
+                MAX(m.Close) as minervini_close,
+                MAX(m.Sma50) as Sma50,
+                MAX(m.Sma150) as Sma150,
+                MAX(m.Sma200) as Sma200,
+                MAX(m.Type_1) + MAX(m.Type_2) + MAX(m.Type_3) + MAX(m.Type_4) + MAX(m.Type_5) + 
+                MAX(m.Type_6) + MAX(m.Type_7) + MAX(m.Type_8) as minervini_score,
+                MAX(r.RelativeStrengthPercentage) as RelativeStrengthPercentage,
+                MAX(r.RelativeStrengthIndex) as RelativeStrengthIndex
             FROM hl_ratio h
-            LEFT JOIN minervini m ON h.Date = m.Date AND h.Code = m.Code
-            LEFT JOIN relative_strength r ON h.Date = r.Date AND h.Code = r.Code
+            LEFT JOIN minervini m ON substr(m.Date, 1, 10) = h.Date AND h.Code = m.Code
+            LEFT JOIN relative_strength r ON substr(r.Date, 1, 10) = h.Date AND h.Code = r.Code
             WHERE h.Code = ? AND h.Date BETWEEN ? AND ?
+            GROUP BY h.Date, h.Code, h.HlRatio
             ORDER BY h.Date ASC
             """
             
@@ -160,7 +163,8 @@ def get_multi_date_analysis(start_date: str, end_date: str, code: str,
 
 
 def get_top_stocks_by_criteria(date: str, criteria: str = 'composite', 
-                             limit: int = 50, db_path: str = RESULTS_DB_PATH) -> pd.DataFrame:
+                             limit: int = 50, include_median_ratio: bool = False, 
+                             db_path: str = RESULTS_DB_PATH) -> pd.DataFrame:
     """
     Get top stocks based on various criteria.
     
@@ -168,6 +172,7 @@ def get_top_stocks_by_criteria(date: str, criteria: str = 'composite',
         date: Analysis date in YYYY-MM-DD format
         criteria: Ranking criteria ('hl_ratio', 'rsi', 'minervini', 'composite')
         limit: Number of top stocks to return
+        include_median_ratio: Whether to include MedianRatio in hl_ratio sorting
         db_path: Path to the analysis results database
         
     Returns:
@@ -184,7 +189,10 @@ def get_top_stocks_by_criteria(date: str, criteria: str = 'composite',
     
     # Apply ranking based on criteria
     if criteria == 'hl_ratio':
-        df_ranked = df.sort_values('HlRatio', ascending=False)
+        if include_median_ratio and 'MedianRatio' in df.columns:
+            df_ranked = df.sort_values(['HlRatio', 'MedianRatio'], ascending=[False, True])
+        else:
+            df_ranked = df.sort_values('HlRatio', ascending=False)
     elif criteria == 'rsi':
         df_ranked = df.sort_values('RelativeStrengthIndex', ascending=False, na_position='last')
     elif criteria == 'minervini':

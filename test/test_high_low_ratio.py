@@ -12,7 +12,8 @@ sys.path.insert(0, project_root)
 from backend.analysis.high_low_ratio import (
     init_hl_ratio_db,
     calc_hl_ratio_for_all,
-    calc_hl_ratio
+    calc_hl_ratio,
+    calc_median_ratio
 )
 
 @pytest.fixture
@@ -49,6 +50,11 @@ def test_init_hl_ratio_db(tmp_path):
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='hl_ratio'")
     assert cursor.fetchone() is not None, "The 'hl_ratio' table was not created."
+    
+    # Check that MedianRatio column exists
+    cursor.execute("PRAGMA table_info(hl_ratio)")
+    columns = [row[1] for row in cursor.fetchall()]
+    assert 'MedianRatio' in columns, "MedianRatio column was not created."
     conn.close()
 
 def test_calc_hl_ratio_for_all(setup_source_db):
@@ -66,6 +72,8 @@ def test_calc_hl_ratio_for_all(setup_source_db):
     assert not results_df.empty
     row = results_df[results_df['Code'] == '1301'].iloc[0]
     assert 0.0 <= row['HlRatio'] <= 100.0
+    assert 0.0 <= row['MedianRatio'] <= 100.0
+    assert 'MedianRatio' in results_df.columns
 
 def test_calc_hl_ratio():
     """Unit test for the core ratio calculation logic with a more realistic assertion."""
@@ -83,3 +91,22 @@ def test_calc_hl_ratio():
     # The highest price is 359+5=364, lowest is 100-5=95. Current is 359.
     # Ratio = (359 - 95) / (364 - 95) * 100 = 98.14...
     assert 98.0 < ratio < 99.0, "Calculation for increasing price is not within expected range."
+
+
+def test_calc_median_ratio():
+    """Unit test for the median ratio calculation logic."""
+    end_date = datetime(2023, 12, 31)
+    dates = [end_date - timedelta(days=i) for i in range(260)]
+    prices = [100 + i for i in range(260)]
+    price_df = pd.DataFrame({
+        'High': [p + 5 for p in prices],
+        'Low': [p - 5 for p in prices],
+        'AdjustmentClose': prices
+    }, index=dates)
+
+    median_ratio = calc_median_ratio(price_df, weeks=52)
+    
+    # For the last 52 weeks (260 days), the median price should be around the middle
+    # Highest: 359+5=364, Lowest: 100-5=95, Median of prices 100-359 ≈ 229.5
+    # MedianRatio = (229.5 - 95) / (364 - 95) * 100 ≈ 50%
+    assert 45.0 < median_ratio < 55.0, "Median ratio calculation is not within expected range."

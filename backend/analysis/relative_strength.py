@@ -281,13 +281,22 @@ def update_rsi_db(result_db_path=RESULTS_DB_PATH, date_list=None, period=-5):
     logger = setup_logging()
     
     if date_list is None:
-        # Get recent dates from the database
+        # Get recent dates from the database that have RSP but no RSI
         try:
             with sqlite3.connect(result_db_path) as conn:
                 date_df = pd.read_sql(
-                    "SELECT DISTINCT Date FROM relative_strength ORDER BY Date DESC LIMIT 10",
+                    """SELECT DISTINCT Date FROM relative_strength 
+                       WHERE RelativeStrengthPercentage IS NOT NULL 
+                       AND RelativeStrengthIndex IS NULL 
+                       ORDER BY Date DESC LIMIT 20""",
                     conn
                 )
+                if date_df.empty:
+                    # Fallback to all recent dates
+                    date_df = pd.read_sql(
+                        "SELECT DISTINCT Date FROM relative_strength ORDER BY Date DESC LIMIT 10",
+                        conn
+                    )
             date_list = date_df['Date'].tolist()
         except sqlite3.Error as e:
             logger.error(f"Error getting date list: {e}")

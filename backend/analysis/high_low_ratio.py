@@ -44,6 +44,7 @@ def init_hl_ratio_db(db_path=RESULTS_DB_PATH):
             Date TEXT NOT NULL,
             Code TEXT NOT NULL,
             HlRatio REAL NOT NULL,
+            MedianRatio REAL NOT NULL,
             Weeks INTEGER NOT NULL,
             PRIMARY KEY (Date, Code)
         )
@@ -51,6 +52,52 @@ def init_hl_ratio_db(db_path=RESULTS_DB_PATH):
         conn.commit()
     
     logger.info("HL ratio results database initialized successfully")
+
+
+def calc_median_ratio(price_df, weeks=52):
+    """Calculate Median-Low ratio for given price data"""
+    logger = logging.getLogger(__name__)
+    days = weeks * 5
+    
+    # Adapt column names to match jquants database schema
+    high_col = 'High'
+    low_col = 'Low'
+    close_col = 'AdjustmentClose' if 'AdjustmentClose' in price_df.columns else 'Close'
+    
+    period_data = price_df[-days:]
+    
+    # Convert to numeric and handle invalid data
+    high_series = pd.to_numeric(period_data[high_col], errors='coerce')
+    low_series = pd.to_numeric(period_data[low_col], errors='coerce')
+    close_series = pd.to_numeric(period_data[close_col], errors='coerce')
+    
+    # Check if we have valid data
+    if high_series.isna().all() or low_series.isna().all() or close_series.isna().all():
+        logger.warning(f"No valid data available for median ratio calculation")
+        return np.nan
+    
+    highest_price = high_series.max()
+    lowest_price = low_series.min()
+    
+    # Check for valid median calculation
+    valid_close_data = close_series.dropna()
+    if len(valid_close_data) == 0:
+        logger.warning(f"No valid close price data for median calculation")
+        return np.nan
+    
+    median_price = valid_close_data.median()
+    
+    if pd.isna(highest_price) or pd.isna(lowest_price) or pd.isna(median_price):
+        logger.warning(f"Invalid price data (NaN values)")
+        return np.nan
+    
+    if highest_price == lowest_price:
+        logger.warning(f"Highest and lowest prices are equal, returning 50.0")
+        return 50.0
+    
+    ratio = (median_price - lowest_price) / (highest_price - lowest_price) * 100
+    logger.debug(f"Median ratio calculated: {ratio:.2f}%")
+    return ratio
 
 
 def calc_hl_ratio(price_df, weeks=52):
@@ -63,9 +110,30 @@ def calc_hl_ratio(price_df, weeks=52):
     low_col = 'Low'
     close_col = 'AdjustmentClose' if 'AdjustmentClose' in price_df.columns else 'Close'
     
-    highest_price = price_df[high_col][-days:].astype('float').max()
-    lowest_price = price_df[low_col][-days:].astype('float').min()
-    current_price = float(price_df[close_col].iloc[-1])
+    # Convert to numeric and handle invalid data
+    high_series = pd.to_numeric(price_df[high_col][-days:], errors='coerce')
+    low_series = pd.to_numeric(price_df[low_col][-days:], errors='coerce')
+    close_series = pd.to_numeric(price_df[close_col], errors='coerce')
+    
+    # Check if we have valid data
+    if high_series.isna().all() or low_series.isna().all() or close_series.isna().all():
+        logger.warning(f"No valid data available for HL ratio calculation")
+        return np.nan
+    
+    highest_price = high_series.max()
+    lowest_price = low_series.min()
+    
+    # Get current price (last valid close price)
+    valid_close_data = close_series.dropna()
+    if len(valid_close_data) == 0:
+        logger.warning(f"No valid close price data for current price")
+        return np.nan
+    
+    current_price = valid_close_data.iloc[-1]
+    
+    if pd.isna(highest_price) or pd.isna(lowest_price) or pd.isna(current_price):
+        logger.warning(f"Invalid price data (NaN values)")
+        return np.nan
     
     if highest_price == lowest_price:
         logger.warning(f"Highest and lowest prices are equal, returning 50.0")
@@ -125,8 +193,14 @@ def calc_hl_ratio_for_all(db_path=JQUANTS_DB_PATH, end_date=None, weeks=52):
                 logger.warning(f"Insufficient data for {code}: {len(df)} days")
                 continue
             df = df.ffill()
-            ratio = calc_hl_ratio(df, weeks)
-            ratio_dict[code] = ratio
+            hl_ratio = calc_hl_ratio(df, weeks)
+            median_ratio = calc_median_ratio(df, weeks)
+            
+            # Only include results if both ratios are valid (not NaN)
+            if not (pd.isna(hl_ratio) or pd.isna(median_ratio)):
+                ratio_dict[code] = {'HlRatio': hl_ratio, 'MedianRatio': median_ratio}
+            else:
+                logger.debug(f"Skipping {code} due to invalid ratio calculations")
 
             if (i + 1) % 100 == 0:
                 logger.info(f"Processed {i + 1}/{len(code_list)} stocks for HL Ratio")
@@ -139,7 +213,11 @@ def calc_hl_ratio_for_all(db_path=JQUANTS_DB_PATH, end_date=None, weeks=52):
         logger.warning("No HL ratios were calculated.")
         return pd.DataFrame()
 
-    ratio_df = pd.DataFrame(list(ratio_dict.items()), columns=['Code', 'HlRatio'])
+    ratio_data = []
+    for code, ratios in ratio_dict.items():
+        ratio_data.append({'Code': code, 'HlRatio': ratios['HlRatio'], 'MedianRatio': ratios['MedianRatio']})
+    
+    ratio_df = pd.DataFrame(ratio_data)
     ratio_df = ratio_df.sort_values('HlRatio', ascending=False).reset_index(drop=True)
     ratio_df['Date'] = end_date.strftime('%Y-%m-%d')
     ratio_df['Weeks'] = weeks
@@ -192,24 +270,31 @@ def calc_hl_ratio_by_code(code, db_path=JQUANTS_DB_PATH, end_date=None, weeks=52
     price_df = price_df.ffill()
     
     try:
-        ratio = calc_hl_ratio(price_df, weeks)
-        logger.info(f"HL ratio for {code}: {ratio:.2f}%")
+        hl_ratio = calc_hl_ratio(price_df, weeks)
+        median_ratio = calc_median_ratio(price_df, weeks)
+        
+        # Check if results are valid
+        if pd.isna(hl_ratio) or pd.isna(median_ratio):
+            logger.warning(f"Invalid ratio calculations for {code}: HL={hl_ratio}, Median={median_ratio}")
+            return None, price_df
+        
+        logger.info(f"HL ratio for {code}: {hl_ratio:.2f}%, Median ratio: {median_ratio:.2f}%")
         
         # Save to database if requested
-        if save_to_db and ratio is not None:
+        if save_to_db and hl_ratio is not None and median_ratio is not None:
             try:
                 init_hl_ratio_db()
                 with sqlite3.connect(RESULTS_DB_PATH) as result_conn:
                     sql = """
-                    INSERT OR REPLACE INTO hl_ratio(Date, Code, HlRatio, Weeks)
-                    VALUES(?,?,?,?)
+                    INSERT OR REPLACE INTO hl_ratio(Date, Code, HlRatio, MedianRatio, Weeks)
+                    VALUES(?,?,?,?,?)
                     """
-                    result_conn.execute(sql, (end_date.strftime('%Y-%m-%d'), code, ratio, weeks))
-                logger.debug(f"HL ratio for {code} saved to database")
+                    result_conn.execute(sql, (end_date.strftime('%Y-%m-%d'), code, hl_ratio, median_ratio, weeks))
+                logger.debug(f"HL ratio and Median ratio for {code} saved to database")
             except Exception as e:
-                logger.error(f"Error saving HL ratio for {code} to database: {e}")
+                logger.error(f"Error saving ratios for {code} to database: {e}")
         
-        return ratio, price_df
+        return {'HlRatio': hl_ratio, 'MedianRatio': median_ratio}, price_df
     except Exception as e:
         logger.error(f"Error calculating HL ratio for {code}: {e}")
         return None, price_df

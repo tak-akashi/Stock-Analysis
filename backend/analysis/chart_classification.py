@@ -98,6 +98,11 @@ class ChartClassifier:
 
     @staticmethod
     def _normalize(arr: np.ndarray) -> np.ndarray:
+        if len(arr) == 0:
+            raise ValueError("Cannot normalize empty array")
+        if len(arr) == 1:
+            return np.array([0.5])  # Single value normalized to middle
+        
         scaler = MinMaxScaler()
         return scaler.fit_transform(arr.reshape(-1, 1)).flatten()
 
@@ -120,17 +125,34 @@ class ChartClassifier:
     def _find_best_match(self, series: np.ndarray, templates: Dict[str, np.ndarray]) -> Tuple[str, float]:
         normalized_series = self._normalize(series)
         best_label, best_score = None, -np.inf
+        
         for label, tpl in templates.items():
+            # Check if lengths match before calculating correlation
+            if len(normalized_series) != len(tpl):
+                print(f"Warning: Length mismatch for {label}: series={len(normalized_series)}, template={len(tpl)}")
+                continue
+                
             score, _ = pearsonr(normalized_series, tpl)
             if np.isnan(score):
                 score = 0
             if score > best_score:
                 best_label, best_score = label, score
+                
+        if best_label is None:
+            raise ValueError(f"No matching template found for series of length {len(normalized_series)}")
+            
         return best_label, best_score
 
-    def classify_latest(self) -> Tuple[str, float]:
+    def classify_latest(self) -> Tuple[str, float, str]:
         latest_data = self.price_data.iloc[-self.window:].values
-        return self._find_best_match(latest_data, self.templates_manual)
+        if len(latest_data) == 0:
+            raise ValueError(f"No price data available for classification (ticker: {self.ticker})")
+        
+        # Get the date of the latest data point
+        latest_date = self.price_data.index[-1].strftime('%Y-%m-%d')
+        
+        label, score = self._find_best_match(latest_data, self.templates_manual)
+        return label, score, latest_date
 
     def save_classification_plot(self, label: str, score: float, output_dir: str):
         latest_data = self.price_data.iloc[-self.window:].values
@@ -208,8 +230,8 @@ def main_sample():
         for window in WINDOWS:
             try:
                 classifier = ChartClassifier(ticker=ticker, window=window)
-                label, score = classifier.classify_latest()
-                print(f"[銘柄: {ticker}, 期間: {window}日] -> 分類: {label} (r={score:.3f})")
+                label, score, data_date = classifier.classify_latest()
+                print(f"[銘柄: {ticker}, 期間: {window}日] -> 分類: {label} (r={score:.3f}) [{data_date}]")
                 classifier.save_classification_plot(label, score, OUTPUT_DIR)
             except (ValueError, ConnectionError) as e:
                 print(f"エラー (銘柄: {ticker}, 期間: {window}日): {e}")
@@ -220,7 +242,6 @@ def main_full_run():
     """Runs classification for all tickers and saves results to the database."""
     WINDOWS = [20, 60, 120, 240]
     all_tickers = get_all_tickers(MASTER_DB_PATH)
-    today_str = datetime.today().strftime('%Y-%m-%d')
 
     if not all_tickers:
         print("銘柄リストが空のため、処理を終了します。")
@@ -234,11 +255,18 @@ def main_full_run():
         for window in WINDOWS:
             try:
                 classifier = ChartClassifier(ticker=ticker, window=window)
-                label, score = classifier.classify_latest()
-                save_result_to_db(RESULTS_DB_PATH, today_str, ticker, window, label, score)
-                print(f"  [期間: {window}日] -> {label} (r={score:.3f}) ... DB保存済み")
-            except (ValueError, ConnectionError) as e:
+                label, score, data_date = classifier.classify_latest()
+                save_result_to_db(RESULTS_DB_PATH, data_date, ticker, window, label, score)
+                print(f"  [期間: {window}日] -> {label} (r={score:.3f}) [{data_date}] ... DB保存済み")
+            except ValueError as e:
+                if "Not enough data" in str(e) or "No price data available" in str(e) or "Cannot normalize empty array" in str(e):
+                    print(f"  [期間: {window}日] -> スキップ: データ不足 ({ticker})")
+                else:
+                    print(f"  [期間: {window}日] -> エラー: {e}")
+            except ConnectionError as e:
                 print(f"  [期間: {window}日] -> エラー: {e}")
+            except Exception as e:
+                print(f"  [期間: {window}日] -> 予期しないエラー: {e}")
 
     print("\n==== 全ての処理が完了しました ====")
     print(f"結果は {RESULTS_DB_PATH} に保存されています。")

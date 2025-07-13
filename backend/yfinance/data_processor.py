@@ -26,7 +26,7 @@ warnings.filterwarnings('ignore')
 dotenv_path = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
 load_dotenv(dotenv_path)
 DATA_DIR = "data"
-DB_PATH = os.getenv("DB_PATH", os.path.join(DATA_DIR, "tse_stocks.db"))
+DB_PATH = os.getenv("DB_PATH", os.path.join(DATA_DIR, "yfinance.db"))
 
 # Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")

@@ -10,7 +10,7 @@
 
 *   **データ収集と管理:**
     *   **日次株価取得 (J-Quants):** 平日の夜間にJ-Quants APIから最新の株価四本値（始値, 高値, 安値, 終値）および出来高を取得し、`data/jquants.db` に保存します。
-    *   **週次企業情報取得 (yfinance):** 週末にyfinanceライブラリを通じて、各企業の属性情報（セクター、業種など）を取得し、`data/jquants.db` に保存します。
+    *   **週次企業情報取得 (yfinance):** 週末にyfinanceライブラリを通じて、各企業の属性情報（セクター、業種など）を取得し、`data/yfinance.db` に保存します。
     *   **月次マスターデータ更新:** 毎月1回、最新の銘柄一覧（マスターデータ）を更新し、`data/master.db` に保存します。
 
 *   **株式分析:**
@@ -29,7 +29,7 @@
 *   **`relative_strength.py`**: 相対力（Relative Strength Percentage: RSP）および相対力指数（Relative Strength Index: RSI）を計算するロジックです。銘柄の市場に対する相対的なパフォーマンスを評価します。結果は `data/analysis_results.db` の `relative_strength` テーブルに保存されます。
 *   **`chart_classification.py`**: 株価チャートのパターンを分類するロジックです。過去の株価データから特定の期間（例: 20日、60日）のチャート形状を抽出し、「上昇」「下落」「もみ合い」などのパターンに分類します。結果は `data/analysis_results.db` の `classification_results` テーブルに保存されます。
 *   **`integrated_analysis.py`**: 上記の各分析プログラムによって生成された結果（`hl_ratio`, `minervini`, `relative_strength`, `classification_results`）を `data/analysis_results.db` から読み込み、それらを統合して複合的な評価を行うためのユーティリティ関数を提供します。これにより、複数の指標を横断的に評価し、より精度の高い銘柄選定を支援します。このスクリプト自体はデータを生成せず、既存のデータをクエリ・集計します。
-*   **`demo_integrated_analysis.py`**: `integrated_analysis.py` の利用例を示すデモスクリプトです。特定日付の総合分析、上位銘柄ランキング、条件フィルタリング、複数日付の時系列分析、サマリー統計など、`integrated_analysis.py` の各種機能のデモンストレーションを確認できます。
+*   **`integrated_analysis2.py`**: `integrated_analysis.py` の機能を利用し、各分析結果を統合して、最終的な分析結果をExcelファイルとして `output` フォルダに出力します。
 
 ## ディレクトリ構成
 
@@ -42,7 +42,7 @@
 │   └── yfinance/    # yfinance関連の処理
 ├── data/            # データベースファイル（.sqlite, .db）を格納
 ├── logs/            # cronジョブの実行ログ
-├── output/          # 分析結果の画像やエラーログなどを格納
+├── output/          # 分析結果のExcelファイルやエラーログなどを格納
 ├── notebook/        # (現在未使用)
 ├── scripts/         # 定期実行用のスクリプト群
 ├── test/            # テストコード
@@ -57,6 +57,8 @@
 *   **`data/jquants.db`**:
     *   J-Quants APIから取得した日次株価データ（`daily_quotes`テーブル）や企業情報が格納されます。
     *   `prices`テーブルも含まれる可能性があります。
+*   **`data/yfinance.db`**:
+    *   yfinanceから取得した企業の属性情報が格納されます。
 *   **`data/master.db`**:
     *   銘柄マスターデータ（`stocks_master`テーブルなど）が格納されます。
 *   **`data/analysis_results.db`**:
@@ -107,8 +109,8 @@
     python scripts/run_jquants_daily.py
     ```
 
-*   **週次タスク (yfinanceデータ取得 & チャート分類):**
-    yfinanceから企業属性情報を取得し、チャートパターン分類を実行します。
+*   **週次タスク (yfinanceデータ取得 & チャート分類 & 統合分析):**
+    yfinanceから企業属性情報を取得し、チャートパターン分類、統合分析を実行します。
     ```bash
     python scripts/run_weekly_tasks.py
     ```
@@ -125,10 +127,10 @@
     python scripts/run_daily_analysis.py
     ```
 
-*   **統合分析デモ:**
-    `integrated_analysis.py` の機能（特定日付の総合分析、上位銘柄ランキング、条件フィルタリング、複数日付の時系列分析、サマリー統計など）のデモンストレーションを確認できます。このスクリプトを実行する前に、`run_daily_analysis.py` や `run_weekly_tasks.py` を実行して、`data/analysis_results.db` に分析結果が格納されていることを確認してください。
+*   **統合分析:**
+    `integrated_analysis2.py` を直接実行することで、統合分析を行い、結果をExcelファイルに出力します。
     ```bash
-    python backend/analysis/demo_integrated_analysis.py
+    python backend/analysis/integrated_analysis2.py
     ```
 
 ### cronによる自動実行
@@ -140,7 +142,7 @@
 # 平日22時にJ-Quantsで株価データを取得
 0 22 * * 1-5 /path/to/python /Users/tak/Markets/Stocks/Stock-Analysis/scripts/run_jquants_daily.py >> /Users/tak/Markets/Stocks/Stock-Analysis/logs/jquants_daily.log 2>&1
 
-# 日曜20時に週次タスク（yfinanceデータ取得とチャート分類）を実行
+# 日曜20時に週次タスク（yfinanceデータ取得、チャート分類、統合分析）を実行
 0 20 * * 0 /path/to/python /Users/tak/Markets/Stocks/Stock-Analysis/scripts/run_weekly_tasks.py >> /Users/tak/Markets/Stocks/Stock-Analysis/logs/weekly_tasks.log 2>&1
 
 # 毎月1日18時にマスターデータを更新
@@ -167,3 +169,4 @@
 *   scikit-learn: 機械学習（チャート分類で使用）
 *   talib: テクニカル分析ライブラリ（Minerviniで使用、オプション）
 *   pytest: テストフレームワーク
+*   openpyxl: Excelファイルの読み書き

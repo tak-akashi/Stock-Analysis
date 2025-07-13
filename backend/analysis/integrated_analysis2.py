@@ -152,9 +152,9 @@ def main():
 
     # Reorder columns to match the notebook's final structure
     final_columns = [
-        'Code', 'ticker', 'longName', 'sector', 'industry', 'marketCap', 'trailingPE',
-        'forwardPE', 'dividendYield', 'website', 'currentPrice',
-        'regularMarketPrice', 'currency', 'exchange', 'shortName',
+        'Code', 'ticker', 'shortName', 'longName', 'sector', 'industry', 'marketCap', 
+        'trailingPE', 'forwardPE', 'dividendYield', 'website', 'currentPrice',
+        'regularMarketPrice', 'currency', 'exchange', 
         'previousClose', 'open', 'dayLow', 'dayHigh', 'volume',
         'averageDailyVolume10Day', 'averageDailyVolume3Month',
         'fiftyTwoWeekLow', 'fiftyTwoWeekHigh', 'fiftyDayAverage',
@@ -184,7 +184,7 @@ def main():
     # --- Output to Excel ---
     output_dir = os.path.join(PROJECT_ROOT, "output")
     os.makedirs(output_dir, exist_ok=True)  # Ensure the output directory exists
-    output_filename = f"comprehensive_analysis_{latest_date.replace('-','')}.xlsx"
+    output_filename = f"integrated_analysis_{latest_date.replace('-','')}.xlsx"
     output_path = os.path.join(output_dir, output_filename)
 
     try:

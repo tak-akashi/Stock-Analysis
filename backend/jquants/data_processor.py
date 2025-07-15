@@ -6,13 +6,14 @@ from dateutil.relativedelta import relativedelta
 import time
 import sqlite3
 from dotenv import load_dotenv
+from typing import Optional
 
 load_dotenv()
 
 API_URL = "https://api.jquants.com"
 
 class JQuantsDataProcessor:
-    def __init__(self, refresh_token: str = None):
+    def __init__(self, refresh_token: Optional[str] = None):
         """
         Args:
             refresh_token (str, optional): J-Quants APIのリフレッシュトークン. Defaults to None.
@@ -168,15 +169,14 @@ class JQuantsDataProcessor:
                 )
             ''')
         
-        for i, row in listed_info_df.iterrows():
+        for i, (_, row) in enumerate(listed_info_df.iterrows()):
             code = row["Code"]
-            print(f"銘柄コード: {code} の株価を取得しています... ({i+1}/{total_codes}) ({from_date} - {to_date})")
+            print(f"銘柄コード: {code} の株価を取得しています... ({int(i)+1}/{total_codes}) ({from_date} - {to_date})")
             
             # APIへの過度な負荷を避けるための待機処理
             time.sleep(0.5)
-            
             try:
-                quotes_df = self.get_daily_quotes(code, from_date, to_date)
+                quotes_df = self.get_daily_quotes(str(code), from_date, to_date)
                 if not quotes_df.empty:
                     # 銘柄ごとにDBに保存
                     with sqlite3.connect(db_path) as con:
@@ -184,7 +184,7 @@ class JQuantsDataProcessor:
                     successful_codes += 1
                     print(f"  → {len(quotes_df)}件のデータを保存しました")
                 else:
-                    print(f"  → データが取得できませんでした")
+                    print(f"  → {code} のデータが取得できませんでした")
                     failed_codes.append(code)
             except Exception as e:
                 print(f"  → エラーが発生しました: {e}")
@@ -233,11 +233,11 @@ class JQuantsDataProcessor:
                 )
             ''')
         
-        for i, row in listed_info_df.iterrows():
+        for i, (_, row) in enumerate(listed_info_df.iterrows()):
             code = row["Code"]
             
             # 各銘柄の最新データ日付を取得
-            last_date = self._get_last_date_for_code(db_path, code)
+            last_date = self._get_last_date_for_code(db_path, str(code))
             
             # 最新データの翌日から今日までを取得対象とする
             try:
@@ -251,23 +251,21 @@ class JQuantsDataProcessor:
             if from_date > to_date:
                 print(f"銘柄コード: {code} は最新データです。スキップします... ({i+1}/{total_codes})")
                 continue
-                
-            print(f"銘柄コード: {code} の株価を取得しています... ({i+1}/{total_codes}) ({from_date} - {to_date})")
             
             # APIへの過度な負荷を避けるための待機処理
             time.sleep(0.5)
             
             try:
-                quotes_df = self.get_daily_quotes(code, from_date, to_date)
+                quotes_df = self.get_daily_quotes(str(code), from_date, to_date)
                 if not quotes_df.empty:
                     # 銘柄ごとにDBに保存
                     with sqlite3.connect(db_path) as con:
                         quotes_df.to_sql('daily_quotes', con, if_exists='append', index=False)
                     successful_codes += 1
                     updated_codes += 1
-                    print(f"  → {len(quotes_df)}件のデータを保存しました")
+                    print(f"銘柄コード: {code} の{len(quotes_df)}件の株価データを保存しました")
                 else:
-                    print(f"  → データが取得できませんでした")
+                    print(f"  → {code} のデータが取得できませんでした")
                     successful_codes += 1  # データがないだけでエラーではない
             except Exception as e:
                 print(f"  → エラーが発生しました: {e}")

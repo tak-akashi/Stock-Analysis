@@ -23,7 +23,7 @@ import warnings
 
 # Since this script is in the same directory as integrated_analysis,
 # the sys.path manipulation from the notebook is no longer needed.
-from integrated_analysis import get_comprehensive_analysis
+from backend.analysis.integrated_analysis import get_comprehensive_analysis
 
 # Ignore warnings for cleaner output
 warnings.filterwarnings('ignore')
@@ -175,7 +175,9 @@ def main():
     # Filter for columns that actually exist in the merged dataframe
     existing_columns = [col for col in final_columns if col in all_df.columns]
     all_df = all_df[existing_columns]
-    all_df = all_df.sort_values(by='composite_score', ascending=False)
+    if 'composite_score' in all_df.columns:
+        all_df['composite_score'] = pd.to_numeric(all_df['composite_score'], errors='coerce')        
+        all_df = all_df.sort_values(by=['composite_score'], ascending=False) 
 
     print("\n--- Final Merged Data ---")
     with pd.option_context('display.max_rows', 10, 'display.max_columns', None):

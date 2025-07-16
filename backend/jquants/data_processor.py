@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 import pandas as pd
 from datetime import datetime
@@ -19,10 +20,18 @@ class JQuantsDataProcessor:
             refresh_token (str, optional): J-Quants APIのリフレッシュトークン. Defaults to None.
                                            指定しない場合は .env ファイルまたは環境変数 JQUANTS_REFRESH_TOKEN が使用されます.
         """
-        self._refresh_token = refresh_token or os.getenv("JQUANTS_REFRESH_TOKEN")
-        if not self._refresh_token:
-            raise ValueError("リフレッシュトークンが指定されていないか、.env ファイルまたは環境変数 JQUANTS_REFRESH_TOKEN が設定されていません。")
+        self._refresh_token = self._get_refresh_token()
         self._id_token = self._get_id_token()
+        
+    def _get_refresh_token(self) -> str:
+        """リフレッシュトークンを取得する"""
+        data={"mailaddress":os.getenv("EMAIL"), "password":os.getenv("PASSWORD")}
+        res = requests.post("https://api.jquants.com/v1/token/auth_user", data=json.dumps(data))
+        if res.status_code == 200:
+            print("リフレッシュトークンの取得に成功しました。")
+            return res.json()['refreshToken']
+        else:
+            raise Exception(f"リフレッシュトークンの取得に失敗しました: {res.json()['message']}")
 
     def _get_id_token(self) -> str:
         """リフレッシュトークンを元にIDトークンを取得する"""

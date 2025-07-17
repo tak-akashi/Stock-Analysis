@@ -26,3 +26,5 @@ sandbox/*
 output/*
 logs/*
 temp/*
+
+**/_old/

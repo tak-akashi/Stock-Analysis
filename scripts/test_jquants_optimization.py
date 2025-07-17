@@ -1,0 +1,304 @@
+"""
+Test script to compare original and optimized JQuants data processor performance.
+"""
+
+import os
+import sys
+import time
+import logging
+import tempfile
+from datetime import datetime
+from pathlib import Path
+
+# Add project root to sys.path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
+from backend.jquants.data_processor import JQuantsDataProcessor
+from backend.jquants.data_processor_optimized import JQuantsDataProcessorOptimized
+
+
+def setup_logging():
+    """Setup logging for the test."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(f'jquants_test_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
+        ]
+    )
+    return logging.getLogger(__name__)
+
+
+def test_performance_comparison(test_codes: list, days_back: int = 30):
+    """
+    Compare performance between original and optimized processors.
+    
+    Args:
+        test_codes: List of stock codes to test with
+        days_back: Number of days back to fetch data for
+    """
+    logger = setup_logging()
+    logger.info("Starting JQuants processor performance comparison")
+    
+    # Test dates
+    from datetime import datetime, timedelta
+    to_date = datetime.now().strftime('%Y-%m-%d')
+    from_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
+    
+    # Create temporary databases
+    with tempfile.TemporaryDirectory() as temp_dir:
+        original_db = os.path.join(temp_dir, "original.db")
+        optimized_db = os.path.join(temp_dir, "optimized.db")
+        
+        try:
+            # Test original processor
+            logger.info("=" * 60)
+            logger.info("Testing ORIGINAL processor")
+            logger.info("=" * 60)
+            
+            original_start = time.time()
+            original_processor = JQuantsDataProcessor()
+            
+            # Simulate processing test codes
+            original_successful = 0
+            for i, code in enumerate(test_codes):
+                logger.info(f"Original: Processing {code} ({i+1}/{len(test_codes)})")
+                try:
+                    df = original_processor.get_daily_quotes(str(code), from_date, to_date)
+                    if not df.empty:
+                        original_successful += 1
+                    time.sleep(0.5)  # Original delay
+                except Exception as e:
+                    logger.error(f"Original processor error for {code}: {e}")
+            
+            original_time = time.time() - original_start
+            
+            # Test optimized processor
+            logger.info("=" * 60)
+            logger.info("Testing OPTIMIZED processor")
+            logger.info("=" * 60)
+            
+            optimized_start = time.time()
+            optimized_processor = JQuantsDataProcessorOptimized(
+                max_concurrent_requests=3,
+                batch_size=len(test_codes),  # Process all test codes at once
+                request_delay=0.1
+            )
+            
+            # Process all codes in one batch
+            import asyncio
+            results = asyncio.run(optimized_processor.process_codes_batch(
+                [str(code) for code in test_codes], from_date, to_date
+            ))
+            
+            optimized_successful = sum(1 for _, df in results if not df.empty)
+            optimized_time = time.time() - optimized_start
+            
+            # Calculate results
+            speedup = original_time / optimized_time if optimized_time > 0 else float('inf')
+            
+            # Display results
+            logger.info("=" * 60)
+            logger.info("PERFORMANCE COMPARISON RESULTS")
+            logger.info("=" * 60)
+            logger.info(f"Test configuration:")
+            logger.info(f"  Stock codes: {len(test_codes)}")
+            logger.info(f"  Date range: {from_date} to {to_date}")
+            logger.info("")
+            logger.info(f"Original processor:")
+            logger.info(f"  Time: {original_time:.2f} seconds")
+            logger.info(f"  Successful: {original_successful}/{len(test_codes)}")
+            logger.info(f"  Rate: {len(test_codes)/original_time:.2f} codes/second")
+            logger.info("")
+            logger.info(f"Optimized processor:")
+            logger.info(f"  Time: {optimized_time:.2f} seconds")
+            logger.info(f"  Successful: {optimized_successful}/{len(test_codes)}")
+            logger.info(f"  Rate: {len(test_codes)/optimized_time:.2f} codes/second")
+            logger.info("")
+            logger.info(f"Performance improvement:")
+            logger.info(f"  Speedup: {speedup:.2f}x")
+            logger.info(f"  Time saved: {original_time - optimized_time:.2f} seconds")
+            logger.info(f"  Efficiency gain: {((speedup - 1) * 100):.1f}%")
+            
+            # Extrapolate to full dataset
+            full_dataset_size = 4000  # Approximate number of listed companies
+            original_full_time = (original_time / len(test_codes)) * full_dataset_size
+            optimized_full_time = (optimized_time / len(test_codes)) * full_dataset_size
+            
+            logger.info("")
+            logger.info(f"Estimated full dataset ({full_dataset_size} codes):")
+            logger.info(f"  Original: {original_full_time/60:.1f} minutes")
+            logger.info(f"  Optimized: {optimized_full_time/60:.1f} minutes")
+            logger.info(f"  Time saved: {(original_full_time - optimized_full_time)/60:.1f} minutes")
+            
+            return {
+                'original_time': original_time,
+                'optimized_time': optimized_time,
+                'speedup': speedup,
+                'original_successful': original_successful,
+                'optimized_successful': optimized_successful
+            }
+            
+        except Exception as e:
+            logger.error(f"Error during performance test: {e}")
+            return None
+
+
+def test_data_accuracy(test_codes: list):
+    """
+    Test that optimized processor returns the same data as original.
+    
+    Args:
+        test_codes: List of stock codes to test
+    """
+    logger = logging.getLogger(__name__)
+    logger.info("Testing data accuracy between processors")
+    
+    from datetime import datetime, timedelta
+    to_date = datetime.now().strftime('%Y-%m-%d')
+    from_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')  # Small range for accuracy test
+    
+    try:
+        original_processor = JQuantsDataProcessor()
+        optimized_processor = JQuantsDataProcessorOptimized()
+        
+        accuracy_results = []
+        
+        for code in test_codes[:3]:  # Test first 3 codes for accuracy
+            logger.info(f"Testing data accuracy for {code}")
+            
+            # Get data from original processor
+            try:
+                original_df = original_processor.get_daily_quotes(str(code), from_date, to_date)
+                time.sleep(0.5)
+            except Exception as e:
+                logger.error(f"Original processor failed for {code}: {e}")
+                continue
+            
+            # Get data from optimized processor
+            try:
+                import asyncio
+                results = asyncio.run(optimized_processor.process_codes_batch(
+                    [str(code)], from_date, to_date
+                ))
+                if results:
+                    _, optimized_df = results[0]
+                else:
+                    optimized_df = None
+            except Exception as e:
+                logger.error(f"Optimized processor failed for {code}: {e}")
+                continue
+            
+            # Compare data
+            if original_df is not None and optimized_df is not None:
+                if len(original_df) == len(optimized_df):
+                    # Compare key columns
+                    key_columns = ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']
+                    data_match = True
+                    
+                    for col in key_columns:
+                        if col in original_df.columns and col in optimized_df.columns:
+                            if not original_df[col].equals(optimized_df[col]):
+                                data_match = False
+                                break
+                    
+                    accuracy_results.append({
+                        'code': code,
+                        'data_match': data_match,
+                        'record_count': len(original_df)
+                    })
+                    
+                    logger.info(f"  {code}: {'✅ MATCH' if data_match else '❌ MISMATCH'} ({len(original_df)} records)")
+                else:
+                    logger.warning(f"  {code}: Record count mismatch ({len(original_df)} vs {len(optimized_df)})")
+                    accuracy_results.append({
+                        'code': code,
+                        'data_match': False,
+                        'record_count': len(original_df)
+                    })
+        
+        # Summary
+        if accuracy_results:
+            matches = sum(1 for r in accuracy_results if r['data_match'])
+            total = len(accuracy_results)
+            accuracy_rate = (matches / total) * 100
+            
+            logger.info(f"Data accuracy test: {matches}/{total} codes matched ({accuracy_rate:.1f}%)")
+            return accuracy_rate >= 95  # 95% accuracy threshold
+        
+        return False
+        
+    except Exception as e:
+        logger.error(f"Error during accuracy test: {e}")
+        return False
+
+
+def main():
+    """Main test function."""
+    logger = setup_logging()
+    
+    # Test with a small subset of major stock codes
+    test_codes = ["7203", "6758", "9984", "8306", "4563", "6861", "8035", "7974"]
+    
+    logger.info("Starting JQuants processor optimization tests")
+    logger.info(f"Test codes: {test_codes}")
+    
+    try:
+        # Test 1: Performance comparison
+        performance_results = test_performance_comparison(test_codes, days_back=7)
+        
+        if performance_results:
+            speedup = performance_results.get('speedup', 0)
+            if speedup >= 2.0:
+                logger.info("✅ Performance test PASSED (2x+ speedup achieved)")
+            else:
+                logger.warning(f"⚠️  Performance test: Only {speedup:.2f}x speedup (target: 2x+)")
+        
+        # Test 2: Data accuracy
+        logger.info("\nStarting data accuracy test...")
+        accuracy_passed = test_data_accuracy(test_codes)
+        
+        if accuracy_passed:
+            logger.info("✅ Data accuracy test PASSED")
+        else:
+            logger.error("❌ Data accuracy test FAILED")
+        
+        # Final summary
+        logger.info("=" * 60)
+        logger.info("FINAL TEST SUMMARY")
+        logger.info("=" * 60)
+        
+        tests_passed = 0
+        total_tests = 2
+        
+        if performance_results and performance_results.get('speedup', 0) >= 2.0:
+            tests_passed += 1
+            logger.info("✅ Performance optimization: PASSED")
+        else:
+            logger.error("❌ Performance optimization: FAILED")
+        
+        if accuracy_passed:
+            tests_passed += 1
+            logger.info("✅ Data accuracy: PASSED")
+        else:
+            logger.error("❌ Data accuracy: FAILED")
+        
+        logger.info(f"\nOverall result: {tests_passed}/{total_tests} tests passed")
+        
+        if tests_passed == total_tests:
+            logger.info("🎉 ALL TESTS PASSED! Optimization is ready for production.")
+        else:
+            logger.warning("⚠️  Some tests failed. Please review the optimization.")
+        
+        return tests_passed == total_tests
+        
+    except Exception as e:
+        logger.error(f"Error during testing: {e}")
+        return False
+
+
+if __name__ == "__main__":
+    success = main()
+    sys.exit(0 if success else 1)

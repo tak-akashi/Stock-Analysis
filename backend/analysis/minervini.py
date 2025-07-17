@@ -77,7 +77,7 @@ def simple_sma_vectorized(data: pd.Series, period: int) -> pd.Series:
     return data.rolling(window=period, min_periods=period).mean()
 
 
-class MinerviniAnalyzerOptimized:
+class MinerviniAnalyzer:
     """Optimized Minervini strategy analyzer using vectorized operations."""
     
     def __init__(self, config: MinerviniConfig):
@@ -158,7 +158,7 @@ def process_stock_batch_minervini(stock_codes: List[str], price_data: pd.DataFra
         Dictionary mapping stock codes to their analysis results
     """
     config = MinerviniConfig()
-    analyzer = MinerviniAnalyzerOptimized(config)
+    analyzer = MinerviniAnalyzer(config)
     results = {}
     
     for code in stock_codes:
@@ -180,7 +180,7 @@ def process_stock_batch_minervini(stock_codes: List[str], price_data: pd.DataFra
     return results
 
 
-class MinerviniDatabaseOptimized:
+class MinerviniDatabase:
     """Optimized database operations for Minervini analysis."""
     
     def __init__(self, config: MinerviniConfig):
@@ -221,7 +221,7 @@ class MinerviniDatabaseOptimized:
         ])
     
     @measure_performance
-    def init_database_optimized(self, source_db_path: str, dest_db_path: str, 
+    def init_database(self, source_db_path: str, dest_db_path: str, 
                               code_list: List[str], n_workers: Optional[int] = None) -> None:
         """Initialize Minervini database using parallel processing."""
         self.logger.info(f"Initializing Minervini database for {len(code_list)} stocks using parallel processing")
@@ -290,10 +290,10 @@ class MinerviniDatabaseOptimized:
             self.logger.info(f"Inserted {inserted} Minervini records")
         
         if errors:
-            self._save_errors(errors, 'errors_minervini_init_optimized.csv')
+            self._save_errors(errors, 'errors_minervini_init.csv')
     
     @measure_performance  
-    def update_database_optimized(self, source_db_path: str, dest_db_path: str, code_list: List[str],
+    def update_database(self, source_db_path: str, dest_db_path: str, code_list: List[str],
                                 calc_start_date: str, calc_end_date: str, period: int = 5) -> None:
         """Update Minervini database using parallel processing."""
         self.logger.info(f"Updating Minervini database for {len(code_list)} stocks from {calc_start_date} to {calc_end_date}")
@@ -360,7 +360,7 @@ class MinerviniDatabaseOptimized:
             self.logger.info(f"Updated {inserted} Minervini records")
         
         if errors:
-            self._save_errors(errors, 'errors_minervini_update_optimized.csv')
+            self._save_errors(errors, 'errors_minervini_update.csv')
     
     def _save_errors(self, errors: List, filename: str) -> None:
         """Save errors to CSV file."""
@@ -371,7 +371,7 @@ class MinerviniDatabaseOptimized:
             self.logger.info(f"Saved {len(errors)} errors to {error_path}")
     
     @measure_performance
-    def update_type8_optimized(self, dest_db_path: str, date_list: List[str], period: int = -5) -> None:
+    def update_type8(self, dest_db_path: str, date_list: List[str], period: int = -5) -> None:
         """Update type 8 (relative strength) using optimized batch operations."""
         self.logger.info(f"Updating Type_8 for {len(date_list)} dates using ultra-fast batch operations")
         
@@ -459,56 +459,56 @@ class MinerviniDatabaseOptimized:
 
 
 # Backward compatibility functions
-def init_minervini_db_optimized(source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection, 
+def init_minervini_db(source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection, 
                                code_list: List[str], n_workers: Optional[int] = None) -> None:
     """Initialize Minervini database using optimized parallel processing."""
     config = MinerviniConfig()
-    database = MinerviniDatabaseOptimized(config)
+    database = MinerviniDatabase(config)
     
     # Get database paths from connections
     source_db_path = source_conn.execute("PRAGMA database_list").fetchone()[2]
     dest_db_path = dest_conn.execute("PRAGMA database_list").fetchone()[2]
     
-    database.init_database_optimized(source_db_path, dest_db_path, code_list, n_workers)
+    database.init_database(source_db_path, dest_db_path, code_list, n_workers)
 
 
-def update_minervini_db_optimized(source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection, 
+def update_minervini_db(source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection, 
                                  code_list: List[str], calc_start_date: str, calc_end_date: str, 
                                  period: int = 5) -> None:
     """Update Minervini database using optimized parallel processing."""
     config = MinerviniConfig()
-    database = MinerviniDatabaseOptimized(config)
+    database = MinerviniDatabase(config)
     
     # Get database paths from connections
     source_db_path = source_conn.execute("PRAGMA database_list").fetchone()[2]
     dest_db_path = dest_conn.execute("PRAGMA database_list").fetchone()[2]
     
-    database.update_database_optimized(source_db_path, dest_db_path, code_list, calc_start_date, calc_end_date, period)
+    database.update_database(source_db_path, dest_db_path, code_list, calc_start_date, calc_end_date, period)
 
 
-def update_type8_db_optimized(conn: sqlite3.Connection, date_list: List[str], period: int = -5) -> None:
+def update_type8_db(conn: sqlite3.Connection, date_list: List[str], period: int = -5) -> None:
     """Update type 8 using optimized batch operations."""
     config = MinerviniConfig()
-    database = MinerviniDatabaseOptimized(config)
+    database = MinerviniDatabase(config)
     
     # Get database path from connection
     dest_db_path = conn.execute("PRAGMA database_list").fetchone()[2]
     
-    database.update_type8_optimized(dest_db_path, date_list, period)
+    database.update_type8(dest_db_path, date_list, period)
 
 
 # Original compatibility functions (call optimized versions)
 def init_minervini_db(source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection, code_list: List[str]) -> None:
     """Backward compatibility - calls optimized version."""
-    init_minervini_db_optimized(source_conn, dest_conn, code_list)
+    init_minervini_db(source_conn, dest_conn, code_list)
 
 
 def update_minervini_db(source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection, code_list: List[str], 
                        calc_start_date: str, calc_end_date: str, period: int = 5) -> None:
     """Backward compatibility - calls optimized version."""
-    update_minervini_db_optimized(source_conn, dest_conn, code_list, calc_start_date, calc_end_date, period)
+    update_minervini_db(source_conn, dest_conn, code_list, calc_start_date, calc_end_date, period)
 
 
 def update_type8_db(conn: sqlite3.Connection, date_list: List[str], period: int = -5) -> None:
     """Backward compatibility - calls optimized version."""
-    update_type8_db_optimized(conn, date_list, period)
+    update_type8_db(conn, date_list, period)

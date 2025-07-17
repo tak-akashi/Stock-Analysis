@@ -38,10 +38,11 @@ JQuantsデータプロセッサのパフォーマンスを大幅に改善し、�
 
 ```
 backend/jquants/
-├── data_processor.py               # 元のプロセッサ
-├── data_processor_optimized.py     # 最適化版プロセッサ
+├── _old/
+│   └── data_processor.py           # 旧バージョン（非最適化版）
+├── data_processor.py               # 最適化版プロセッサ（標準版）
 scripts/
-├── test_jquants_optimization.py    # 性能比較テスト
+├── test_jquants_performance.py     # パフォーマンステスト
 ```
 
 ## 🛠 セットアップ
@@ -69,10 +70,10 @@ PASSWORD=your_password
 ### 最適化版プロセッサの基本使用
 
 ```python
-from backend.jquants.data_processor_optimized import JQuantsDataProcessorOptimized
+from backend.jquants.data_processor import JQuantsDataProcessor
 
 # 初期化（パラメータは調整可能）
-processor = JQuantsDataProcessorOptimized(
+processor = JQuantsDataProcessor(
     max_concurrent_requests=3,  # 同時API接続数
     batch_size=100,            # バッチサイズ
     request_delay=0.1          # リクエスト間隔（秒）
@@ -92,15 +93,15 @@ processor.update_prices_to_db_optimized(db_path)
 
 ```bash
 # 最適化版の実行
-python backend/jquants/data_processor_optimized.py
+python backend/jquants/data_processor.py
 
-# 性能比較テスト
-python scripts/test_jquants_optimization.py
+# パフォーマンステスト
+python scripts/test_jquants_performance.py
 ```
 
 ## ⚙️ 設定パラメータ
 
-### JQuantsDataProcessorOptimized 初期化パラメータ
+### JQuantsDataProcessor 初期化パラメータ
 
 | パラメータ | デフォルト | 説明 |
 |------------|------------|------|
@@ -112,21 +113,21 @@ python scripts/test_jquants_optimization.py
 
 ```python
 # 高速化重視（APIレート制限に注意）
-processor = JQuantsDataProcessorOptimized(
+processor = JQuantsDataProcessor(
     max_concurrent_requests=5,
     batch_size=200,
     request_delay=0.05
 )
 
 # 安定性重視
-processor = JQuantsDataProcessorOptimized(
+processor = JQuantsDataProcessor(
     max_concurrent_requests=2,
     batch_size=50,
     request_delay=0.2
 )
 
 # メモリ使用量重視
-processor = JQuantsDataProcessorOptimized(
+processor = JQuantsDataProcessor(
     max_concurrent_requests=3,
     batch_size=25,
     request_delay=0.1
@@ -135,43 +136,49 @@ processor = JQuantsDataProcessorOptimized(
 
 ## 🧪 テストと検証
 
-### 性能比較テスト
+### パフォーマンステスト
 
 ```bash
-# 詳細な性能比較を実行
-python scripts/test_jquants_optimization.py
+# パフォーマンステストの実行
+python scripts/test_jquants_performance.py
 ```
 
 テストでは以下を確認：
-- 処理時間の比較
-- データ精度の検証
-- エラー耐性の確認
+- 異なる設定でのパフォーマンス比較
+- 最適なバッチサイズの特定
+- エラー回復機能の検証
 - メモリ使用量の監視
 
 ### テスト結果の例
 
 ```
-PERFORMANCE COMPARISON RESULTS
+PERFORMANCE COMPARISON
 ====================================================
-Original processor:
-  Time: 42.5 seconds
-  Successful: 8/8
-  Rate: 0.19 codes/second
+Test configuration:
+  Stock codes: 16
+  Date range: 2025-01-10 to 2025-01-17
 
-Optimized processor:
-  Time: 12.3 seconds
-  Successful: 8/8
-  Rate: 0.65 codes/second
+Conservative:
+  Time: 18.45s
+  Codes/sec: 0.87
+  Records/sec: 125.3
 
-Performance improvement:
-  Speedup: 3.46x
-  Time saved: 30.2 seconds
-  Efficiency gain: 246%
+Standard:
+  Time: 12.3s
+  Codes/sec: 1.30
+  Records/sec: 187.2
+  ⭐ FASTEST
 
-Estimated full dataset (4000 codes):
-  Original: 351.0 minutes
-  Optimized: 101.4 minutes
-  Time saved: 249.6 minutes
+Aggressive:
+  Time: 14.2s
+  Codes/sec: 1.13
+  Records/sec: 162.1
+  1.15x slower than Standard
+
+Estimated time for full dataset (4000 codes):
+  Conservative: 76.5 minutes
+  Standard: 51.3 minutes
+  Aggressive: 59.0 minutes
 ```
 
 ## 📊 監視とログ
@@ -182,7 +189,7 @@ Estimated full dataset (4000 codes):
 import logging
 
 # 詳細ログを有効化
-logging.getLogger('backend.jquants.data_processor_optimized').setLevel(logging.DEBUG)
+logging.getLogger('backend.jquants.data_processor').setLevel(logging.DEBUG)
 ```
 
 ### 主要なメトリクス
@@ -202,7 +209,7 @@ logging.getLogger('backend.jquants.data_processor_optimized').setLevel(logging.D
 
 ```python
 # 並列度を下げる
-processor = JQuantsDataProcessorOptimized(
+processor = JQuantsDataProcessor(
     max_concurrent_requests=2,
     request_delay=0.2
 )
@@ -212,7 +219,7 @@ processor = JQuantsDataProcessorOptimized(
 
 ```python
 # バッチサイズを小さくする
-processor = JQuantsDataProcessorOptimized(
+processor = JQuantsDataProcessor(
     batch_size=25
 )
 ```
@@ -221,7 +228,7 @@ processor = JQuantsDataProcessorOptimized(
 
 ```python
 # aiohttp のタイムアウト設定を調整
-# data_processor_optimized.py 内で：
+# data_processor.py 内で：
 timeout = aiohttp.ClientTimeout(total=60)  # 60秒に延長
 ```
 
@@ -248,7 +255,7 @@ grep "ERROR" jquants_optimized_*.log
 
 ```bash
 # CPU使用率の監視
-top -p $(pgrep -f data_processor_optimized)
+top -p $(pgrep -f data_processor)
 
 # メモリ使用量の監視
 free -h
@@ -261,7 +268,7 @@ df -h data/
 
 ```bash
 # crontab での日次更新設定例
-0 6 * * * /path/to/python /path/to/backend/jquants/data_processor_optimized.py
+0 6 * * * /path/to/python /path/to/backend/jquants/data_processor.py
 ```
 
 ### 3. バックアップ戦略
@@ -271,20 +278,33 @@ df -h data/
 cp data/jquants.db data/jquants_backup_$(date +%Y%m%d).db
 ```
 
-## 🔄 元のプロセッサとの互換性
+## 🧪 パフォーマンステスト
 
-最適化版は元のプロセッサと完全に互換性があります：
+現在の標準版（最適化済み）のパフォーマンステスト：
+
+```bash
+# パフォーマンステストの実行
+python scripts/test_jquants_performance.py
+```
+
+テストでは以下を確認：
+- 異なる設定でのパフォーマンス比較
+- 最適なバッチサイズの特定
+- エラー回復機能の検証
 
 ```python
-# 元のプロセッサ
+# 基本的な使用方法
 from backend.jquants.data_processor import JQuantsDataProcessor
 
-# 最適化版（ドロップイン置換可能）
-from backend.jquants.data_processor_optimized import JQuantsDataProcessorOptimized
+# 標準設定
+processor = JQuantsDataProcessor(
+    max_concurrent_requests=3,
+    batch_size=100,
+    request_delay=0.1
+)
 
-# 同じインターフェース
-processor = JQuantsDataProcessorOptimized()
-processor.update_prices_to_db_optimized(db_path)  # 最適化メソッド
+# データベースへの保存
+processor.update_prices_to_db_optimized(db_path)
 ```
 
 ## 📈 今後の改善予定

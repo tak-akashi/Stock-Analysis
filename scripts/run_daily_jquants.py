@@ -14,7 +14,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
 # 最適化版の使用
-from backend.jquants.data_processor_optimized import JQuantsDataProcessorOptimized
+from backend.jquants.data_processor import JQuantsDataProcessor
 
 
 def setup_logging():
@@ -49,7 +49,7 @@ def main():
         
         logger.info(f"データベースパス: {db_path}")
         
-        processor = JQuantsDataProcessorOptimized(
+        processor = JQuantsDataProcessor(
             max_concurrent_requests=3,  # 調整可能
             batch_size=100,
             request_delay=0.1
@@ -61,10 +61,10 @@ def main():
         
         if not db_exists:
             logger.info("初回実行: 過去5年分のデータを取得します")
-            processor.get_all_prices_for_past_5_years_to_db_optimized(db_path)
+            processor.get_all_prices_for_past_5_years_to_db(db_path)
         else:
             logger.info("差分更新を実行します")
-            processor.update_prices_to_db_optimized(db_path)
+            processor.update_prices_to_db(db_path)
         
         # 統計情報を表示
         stats = processor.get_database_stats(db_path)

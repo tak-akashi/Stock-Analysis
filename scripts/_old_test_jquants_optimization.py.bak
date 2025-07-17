@@ -14,8 +14,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+from backend.jquants._old.data_processor import JQuantsDataProcessor as JQuantsDataProcessorOld
 from backend.jquants.data_processor import JQuantsDataProcessor
-from backend.jquants.data_processor_optimized import JQuantsDataProcessorOptimized
 
 
 def setup_logging():
@@ -59,7 +59,7 @@ def test_performance_comparison(test_codes: list, days_back: int = 30):
             logger.info("=" * 60)
             
             original_start = time.time()
-            original_processor = JQuantsDataProcessor()
+            original_processor = JQuantsDataProcessorOld()
             
             # Simulate processing test codes
             original_successful = 0
@@ -81,7 +81,7 @@ def test_performance_comparison(test_codes: list, days_back: int = 30):
             logger.info("=" * 60)
             
             optimized_start = time.time()
-            optimized_processor = JQuantsDataProcessorOptimized(
+            optimized_processor = JQuantsDataProcessor(
                 max_concurrent_requests=3,
                 batch_size=len(test_codes),  # Process all test codes at once
                 request_delay=0.1
@@ -161,8 +161,8 @@ def test_data_accuracy(test_codes: list):
     from_date = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')  # Small range for accuracy test
     
     try:
-        original_processor = JQuantsDataProcessor()
-        optimized_processor = JQuantsDataProcessorOptimized()
+        original_processor = JQuantsDataProcessorOld()
+        optimized_processor = JQuantsDataProcessor()
         
         accuracy_results = []
         

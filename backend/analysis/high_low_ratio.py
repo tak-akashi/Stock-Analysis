@@ -164,7 +164,7 @@ def process_stock_batch(stock_codes: list, price_data: pd.DataFrame, weeks: int)
 
 
 @measure_performance
-def calc_hl_ratio_for_all_optimized(db_path=JQUANTS_DB_PATH, end_date=None, weeks=52, n_workers=None):
+def calc_hl_ratio_for_all(db_path=JQUANTS_DB_PATH, end_date=None, weeks=52, n_workers=None):
     """
     Optimized version of calc_hl_ratio_for_all using parallel processing and batch operations.
     
@@ -288,12 +288,12 @@ def save_results_batch(ratio_df: pd.DataFrame, db_path: str):
 
 
 # Maintain backward compatibility
-def calc_hl_ratio_for_all(db_path=JQUANTS_DB_PATH, end_date=None, weeks=52):
+def calc_hl_ratio_for_all_legacy(db_path=JQUANTS_DB_PATH, end_date=None, weeks=52):
     """
     Wrapper function to maintain backward compatibility.
     Calls the optimized version.
     """
-    return calc_hl_ratio_for_all_optimized(db_path, end_date, weeks)
+    return calc_hl_ratio_for_all(db_path, end_date, weeks)
 
 
 def calc_hl_ratio_by_code(code, db_path=JQUANTS_DB_PATH, end_date=None, weeks=52, save_to_db=True):
@@ -367,4 +367,4 @@ def calc_hl_ratio_by_code(code, db_path=JQUANTS_DB_PATH, end_date=None, weeks=52
 
 if __name__ == "__main__":
     setup_logging()
-    calc_hl_ratio_for_all_optimized()
+    calc_hl_ratio_for_all()

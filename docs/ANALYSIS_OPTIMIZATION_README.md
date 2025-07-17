@@ -31,9 +31,9 @@ backend/
 │   ├── parallel_processor.py      # 並列処理ユーティリティ
 │   └── cache_manager.py           # キャッシュ管理
 ├── analysis/
-│   ├── high_low_ratio_optimized.py    # 高値安値比率の最適化版
-│   ├── relative_strength_optimized.py # 相対力指数の最適化版
-│   ├── minervini_optimized.py         # ミネルヴィニ分析の最適化版
+│   ├── high_low_ratio.py              # 高値安値比率（標準版）
+│   ├── relative_strength.py           # 相対力指数（標準版）
+│   ├── minervini.py                   # ミネルヴィニ分析（標準版）
 │   └── chart_classification.py        # チャートパターン分類（アダプティブウィンドウ付き）
 ```
 
@@ -41,7 +41,7 @@ backend/
 
 ```
 scripts/
-├── run_daily_analysis_optimized.py    # 最適化された日次分析スクリプト
+├── run_daily_analysis.py              # 日次分析スクリプト（標準版）
 ├── create_database_indexes.py         # データベースインデックス作成
 └── test_optimizations.py              # 最適化検証テスト
 ```
@@ -70,13 +70,13 @@ python scripts/create_database_indexes.py
 
 ```bash
 # 全モジュールを実行
-python scripts/run_daily_analysis_optimized.py
+python scripts/run_daily_analysis.py
 
 # 特定のモジュールのみ実行
-python scripts/run_daily_analysis_optimized.py --modules hl_ratio rsp
+python scripts/run_daily_analysis.py --modules hl_ratio rsp
 
 # 特定の日付で実行
-python scripts/run_daily_analysis_optimized.py --date 2024-01-15
+python scripts/run_daily_analysis.py --date 2024-01-15
 ```
 
 ### 4. 最適化の検証

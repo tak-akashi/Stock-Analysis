@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
-from backend.analysis.relative_strength_optimized import update_rsi_db_optimized
+from backend.analysis.relative_strength import update_rsi_db
 
 def setup_logging():
     """Setup logging for the test"""
@@ -48,7 +48,7 @@ def main():
         start_time = time.time()
         
         # Call the optimized function
-        errors = update_rsi_db_optimized(
+        errors = update_rsi_db(
             result_db_path=results_db_path,
             date_list=None,  # Auto-detect dates
             period=-5

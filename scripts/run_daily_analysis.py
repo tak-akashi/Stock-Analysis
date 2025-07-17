@@ -10,10 +10,10 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
 # Import optimized functions
-from backend.analysis.high_low_ratio_optimized import calc_hl_ratio_for_all_optimized, init_hl_ratio_db
-from backend.analysis.minervini_optimized import update_minervini_db_optimized, update_type8_db_optimized, init_minervini_db_optimized
+from backend.analysis.high_low_ratio import calc_hl_ratio_for_all, init_hl_ratio_db
+from backend.analysis.minervini import update_minervini_db, update_type8_db, init_minervini_db
 # Removed dependency on old minervini module
-from backend.analysis.relative_strength_optimized import update_rsp_db_optimized, update_rsi_db_optimized, init_rsp_db_optimized, init_results_db_optimized
+from backend.analysis.relative_strength import update_rsp_db, update_rsi_db, init_rsp_db, init_results_db
 from backend.analysis.integrated_analysis import create_analysis_summary
 from backend.analysis.chart_classification import main_full_run as run_chart_classification_full
 from backend.utils.parallel_processor import measure_performance
@@ -95,7 +95,7 @@ class DailyAnalysisConfig:
 
 
 @measure_performance
-def run_daily_analysis_optimized(target_date: Optional[str] = None, modules: Optional[List[str]] = None) -> bool:
+def run_daily_analysis(target_date: Optional[str] = None, modules: Optional[List[str]] = None) -> bool:
     """
     Run the optimized daily analysis workflow.
     
@@ -113,7 +113,7 @@ def run_daily_analysis_optimized(target_date: Optional[str] = None, modules: Opt
     if modules is None:
         modules = ['rsp', 'rsi', 'minervini', 'type8', 'hl_ratio', 'summary', 'chart_classification']
     
-    logger.info(f"Starting OPTIMIZED daily analysis workflow. Modules to run: {modules}")
+    logger.info(f"Starting daily analysis workflow. Modules to run: {modules}")
 
     success = True
 
@@ -155,9 +155,9 @@ def run_daily_analysis_optimized(target_date: Optional[str] = None, modules: Opt
 
             # --- Analysis Steps ---
 
-            # 1. Relative Strength Percentage (RSP) Update (OPTIMIZED)
+            # 1. Relative Strength Percentage (RSP) Update
             if 'rsp' in modules:
-                logger.info("Running OPTIMIZED Relative Strength Percentage (RSP) update...")
+                logger.info("Running Relative Strength Percentage (RSP) update...")
                 try:
                     cursor = db_manager.results_conn.cursor()
                     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='relative_strength'")
@@ -165,7 +165,7 @@ def run_daily_analysis_optimized(target_date: Optional[str] = None, modules: Opt
                     
                     if not table_exists:
                         logger.info("relative_strength table not found. Initializing with full data using parallel processing...")
-                        processed, errors = init_rsp_db_optimized(
+                        processed, errors = init_rsp_db(
                             db_path=analysis_config.jquants_db_path,
                             result_db_path=analysis_config.results_db_path,
                             n_workers=analysis_config.n_workers
@@ -173,7 +173,7 @@ def run_daily_analysis_optimized(target_date: Optional[str] = None, modules: Opt
                         logger.info("relative_strength table initialization completed.")
                     else:
                         logger.info("relative_strength table found. Updating recent data using parallel processing...")
-                        processed, errors = update_rsp_db_optimized(
+                        processed, errors = update_rsp_db(
                             db_path=analysis_config.jquants_db_path, 
                             result_db_path=analysis_config.results_db_path,
                             calc_start_date=calc_start_date_str, 
@@ -192,13 +192,13 @@ def run_daily_analysis_optimized(target_date: Optional[str] = None, modules: Opt
                     logger.error(f"Error in RSP update: {e}", exc_info=True)
                     success = False
 
-            # 2. Relative Strength Index (RSI) Update (OPTIMIZED)
+            # 2. Relative Strength Index (RSI) Update
             if 'rsi' in modules:
-                logger.info("Running OPTIMIZED Relative Strength Index (RSI) update...")
+                logger.info("Running Relative Strength Index (RSI) update...")
                 try:
                     date_list_for_rsi = [(end_date - timedelta(days=i)).strftime('%Y-%m-%d') 
                                        for i in range(analysis_config.update_window_days)]
-                    errors = update_rsi_db_optimized(
+                    errors = update_rsi_db(
                         result_db_path=analysis_config.results_db_path, 
                         date_list=date_list_for_rsi, 
                         period=-analysis_config.update_window_days
@@ -214,9 +214,9 @@ def run_daily_analysis_optimized(target_date: Optional[str] = None, modules: Opt
                     logger.error(f"Error in RSI update: {e}", exc_info=True)
                     success = False
 
-            # 3. Minervini Analysis Update (OPTIMIZED)
+            # 3. Minervini Analysis Update
             if 'minervini' in modules:
-                logger.info("Running OPTIMIZED Minervini analysis update...")
+                logger.info("Running Minervini analysis update...")
                 try:
                     cursor = db_manager.results_conn.cursor()
                     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='minervini'")
@@ -224,7 +224,7 @@ def run_daily_analysis_optimized(target_date: Optional[str] = None, modules: Opt
 
                     if not table_exists:
                         logger.info("'minervini' table not found. Initializing with full data using parallel processing...")
-                        init_minervini_db_optimized(
+                        init_minervini_db(
                             db_manager.jquants_conn, 
                             db_manager.results_conn, 
                             code_list,
@@ -233,7 +233,7 @@ def run_daily_analysis_optimized(target_date: Optional[str] = None, modules: Opt
                         logger.info("'minervini' table initialization completed.")
                     else:
                         logger.info("'minervini' table found. Updating recent data using parallel processing...")
-                        update_minervini_db_optimized(
+                        update_minervini_db(
                             db_manager.jquants_conn, # source_conn
                             db_manager.results_conn, # dest_conn
                             code_list, 
@@ -246,9 +246,9 @@ def run_daily_analysis_optimized(target_date: Optional[str] = None, modules: Opt
                     logger.error(f"Error in Minervini update: {e}", exc_info=True)
                     success = False
 
-            # 4. Minervini Type 8 Update (OPTIMIZED)
+            # 4. Minervini Type 8 Update
             if 'type8' in modules:
-                logger.info("Running OPTIMIZED Minervini Type 8 update...")
+                logger.info("Running Minervini Type 8 update...")
                 try:
                     # Check how many stocks have relative strength data for the target date
                     cursor = db_manager.results_conn.cursor()
@@ -259,7 +259,7 @@ def run_daily_analysis_optimized(target_date: Optional[str] = None, modules: Opt
                     stock_count = cursor.fetchone()[0]
                     logger.info(f"Found {stock_count} stocks with relative strength data for {calc_end_date_str}")
                     
-                    update_type8_db_optimized(
+                    update_type8_db(
                         db_manager.results_conn, 
                         [calc_end_date_str],  # Only update for the latest date
                         period=-1
@@ -269,9 +269,9 @@ def run_daily_analysis_optimized(target_date: Optional[str] = None, modules: Opt
                     logger.error(f"Error in Minervini Type 8 update: {e}", exc_info=True)
                     success = False
 
-            # 5. High-Low Ratio Calculation (OPTIMIZED)
+            # 5. High-Low Ratio Calculation
             if 'hl_ratio' in modules:
-                logger.info("Running OPTIMIZED High-Low Ratio calculation...")
+                logger.info("Running High-Low Ratio calculation...")
                 try:
                     # Ensure hl_ratio table exists with indexes
                     cursor = db_manager.results_conn.cursor()
@@ -283,7 +283,7 @@ def run_daily_analysis_optimized(target_date: Optional[str] = None, modules: Opt
                         logger.info("'hl_ratio' table initialized.")
 
                     # Calculate HL Ratio using optimized function
-                    result_df = calc_hl_ratio_for_all_optimized(
+                    result_df = calc_hl_ratio_for_all(
                         db_path=analysis_config.jquants_db_path,
                         end_date=calc_end_date_str,
                         weeks=analysis_config.hl_ratio_weeks,
@@ -326,11 +326,11 @@ def run_daily_analysis_optimized(target_date: Optional[str] = None, modules: Opt
                     logger.error(f"Error in chart classification: {e}", exc_info=True)
                     success = False
 
-        status_msg = "OPTIMIZED daily analysis workflow finished successfully." if success else "OPTIMIZED daily analysis workflow completed with errors."
+        status_msg = "Daily analysis workflow finished successfully." if success else "Daily analysis workflow completed with errors."
         logger.info(status_msg)
 
     except Exception as e:
-        logger.error(f"An error occurred during OPTIMIZED daily analysis workflow: {e}", exc_info=True)
+        logger.error(f"An error occurred during daily analysis workflow: {e}", exc_info=True)
         success = False
     
     return success
@@ -346,4 +346,4 @@ if __name__ == "__main__":
                        help='Analysis modules to run (default: all modules)')
     args = parser.parse_args()
     
-    run_daily_analysis_optimized(target_date=args.date, modules=args.modules)
+    run_daily_analysis(target_date=args.date, modules=args.modules)

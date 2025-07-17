@@ -116,7 +116,7 @@ def process_stock_batch_rsp(stock_codes: List[str], price_data: pd.DataFrame, pe
     return results
 
 
-def init_results_db_optimized(db_path):
+def init_results_db(db_path):
     """Initialize results database with indexes for performance"""
     logger = logging.getLogger(__name__)
     logger.info(f"Initializing relative strength results database at {db_path}")
@@ -148,7 +148,7 @@ def init_results_db_optimized(db_path):
 
 
 @measure_performance
-def init_rsp_db_optimized(db_path=JQUANTS_DB_PATH, result_db_path=RESULTS_DB_PATH, n_workers=None):
+def init_rsp_db(db_path=JQUANTS_DB_PATH, result_db_path=RESULTS_DB_PATH, n_workers=None):
     """Initialize relative strength database with all stock data using parallel processing"""
     logger = setup_logging()
     
@@ -167,7 +167,7 @@ def init_rsp_db_optimized(db_path=JQUANTS_DB_PATH, result_db_path=RESULTS_DB_PAT
     logger.info(f"Initializing relative strength analysis for {len(code_list)} stocks using parallel processing")
     
     # Initialize results database
-    init_results_db_optimized(result_db_path)
+    init_results_db(result_db_path)
     
     # Load all price data at once
     try:
@@ -238,7 +238,7 @@ def init_rsp_db_optimized(db_path=JQUANTS_DB_PATH, result_db_path=RESULTS_DB_PAT
 
 
 @measure_performance
-def update_rsp_db_optimized(db_path=JQUANTS_DB_PATH, result_db_path=RESULTS_DB_PATH, 
+def update_rsp_db(db_path=JQUANTS_DB_PATH, result_db_path=RESULTS_DB_PATH, 
                           calc_start_date=None, calc_end_date=None, period=-5, n_workers=None):
     """Update relative strength database with recent data using parallel processing"""
     logger = setup_logging()
@@ -329,7 +329,7 @@ def update_rsp_db_optimized(db_path=JQUANTS_DB_PATH, result_db_path=RESULTS_DB_P
 
 
 @measure_performance
-def update_rsi_db_optimized(result_db_path=RESULTS_DB_PATH, date_list=None, period=-5):
+def update_rsi_db(result_db_path=RESULTS_DB_PATH, date_list=None, period=-5):
     """Update relative strength index for multiple dates using optimized batch operations"""
     logger = setup_logging()
     
@@ -481,16 +481,16 @@ def update_rsi_db_optimized(result_db_path=RESULTS_DB_PATH, date_list=None, peri
 # Maintain backward compatibility
 def init_rsp_db(db_path=JQUANTS_DB_PATH, result_db_path=RESULTS_DB_PATH):
     """Wrapper for backward compatibility"""
-    return init_rsp_db_optimized(db_path, result_db_path)
+    return init_rsp_db(db_path, result_db_path)
 
 def update_rsp_db(db_path=JQUANTS_DB_PATH, result_db_path=RESULTS_DB_PATH, calc_start_date=None, calc_end_date=None, period=-5):
     """Wrapper for backward compatibility"""
-    return update_rsp_db_optimized(db_path, result_db_path, calc_start_date, calc_end_date, period)
+    return update_rsp_db(db_path, result_db_path, calc_start_date, calc_end_date, period)
 
 def update_rsi_db(result_db_path=RESULTS_DB_PATH, date_list=None, period=-5):
     """Wrapper for backward compatibility"""
-    return update_rsi_db_optimized(result_db_path, date_list, period)
+    return update_rsi_db(result_db_path, date_list, period)
 
 def init_results_db(db_path):
     """Wrapper for backward compatibility"""
-    return init_results_db_optimized(db_path)
+    return init_results_db(db_path)

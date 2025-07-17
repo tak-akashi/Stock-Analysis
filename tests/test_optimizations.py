@@ -17,11 +17,11 @@ from typing import Dict, Any, Tuple
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-# Import original implementations
-from backend.analysis import high_low_ratio, relative_strength, minervini
+# Import original implementations (from _old folder)
+from backend.analysis._old import high_low_ratio as high_low_ratio_old, relative_strength as relative_strength_old, minervini as minervini_old
 
-# Import optimized implementations
-from backend.analysis import high_low_ratio_optimized, relative_strength_optimized, minervini_optimized
+# Import current implementations (previously optimized)
+from backend.analysis import high_low_ratio, relative_strength, minervini
 
 from backend.utils.parallel_processor import measure_performance
 
@@ -152,13 +152,13 @@ def test_high_low_ratio(logger: logging.Logger, test_codes: list, end_date: str,
     # Test original implementation
     logger.info("Running original implementation...")
     start_time = time.time()
-    original_result = high_low_ratio.calc_hl_ratio_for_all(end_date=end_date, weeks=weeks)
+    original_result = high_low_ratio_old.calc_hl_ratio_for_all(end_date=end_date, weeks=weeks)
     original_time = time.time() - start_time
     
     # Test optimized implementation
     logger.info("Running optimized implementation...")
     start_time = time.time()
-    optimized_result = high_low_ratio_optimized.calc_hl_ratio_for_all_optimized(end_date=end_date, weeks=weeks)
+    optimized_result = high_low_ratio.calc_hl_ratio_for_all(end_date=end_date, weeks=weeks)
     optimized_time = time.time() - start_time
     
     # Compare results
@@ -234,14 +234,14 @@ def test_single_stock_calculations(logger: logging.Logger, test_code: str = "720
         
         # Original implementation
         try:
-            original_hl, _ = high_low_ratio.calc_hl_ratio_by_code(test_code, end_date=end_date, save_to_db=False)
+            original_hl, _ = high_low_ratio_old.calc_hl_ratio_by_code(test_code, end_date=end_date, save_to_db=False)
         except Exception as e:
             logger.error(f"Error in original HL ratio calculation: {e}")
             original_hl = None
         
         # Optimized implementation
         try:
-            optimized_hl, _ = high_low_ratio_optimized.calc_hl_ratio_by_code(test_code, end_date=end_date, save_to_db=False)
+            optimized_hl, _ = high_low_ratio.calc_hl_ratio_by_code(test_code, end_date=end_date, save_to_db=False)
         except Exception as e:
             logger.error(f"Error in optimized HL ratio calculation: {e}")
             optimized_hl = None
@@ -271,14 +271,14 @@ def test_single_stock_calculations(logger: logging.Logger, test_code: str = "720
             
             # Original RSP
             try:
-                original_rsp = relative_strength.relative_strength_percentage(close_prices.values)
+                original_rsp = relative_strength_old.relative_strength_percentage(close_prices.values)
             except Exception as e:
                 logger.error(f"Error in original RSP calculation: {e}")
                 original_rsp = None
             
             # Optimized RSP
             try:
-                optimized_df = relative_strength_optimized.relative_strength_percentage_vectorized(
+                optimized_df = relative_strength.relative_strength_percentage_vectorized(
                     stock_data_indexed.copy()
                 )
                 optimized_rsp = optimized_df['RelativeStrengthPercentage'].values

@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
-from backend.analysis.minervini_optimized import MinerviniConfig, MinerviniDatabaseOptimized
+from backend.analysis.minervini import MinerviniConfig, MinerviniDatabase
 
 def setup_logging():
     """Setup logging for the test"""
@@ -62,10 +62,10 @@ def main():
         
         # Initialize config and database processor
         config = MinerviniConfig()
-        database = MinerviniDatabaseOptimized(config)
+        database = MinerviniDatabase(config)
         
         # Call the optimized function
-        database.update_type8_optimized(
+        database.update_type8(
             dest_db_path=results_db_path,
             date_list=test_date_list,
             period=-1  # Just the latest date

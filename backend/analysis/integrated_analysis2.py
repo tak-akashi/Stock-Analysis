@@ -132,16 +132,22 @@ def pivot_chart_classification_data(df: pd.DataFrame, logger: logging.Logger) ->
             values=['pattern_label', 'score'],
             aggfunc='first'
         )
-        
         # Efficient column flattening
         pivot_df.columns = [f'{col[0]}_{col[1]}' for col in pivot_df.columns]
         pivot_df = pivot_df.reset_index()
         
         # Batch rename operation
         pivot_df.rename(columns={'date': 'Date', 'ticker': 'Code'}, inplace=True)
+
+        fixed_columns = ['Date', 'Code']
+        selected_columns = [col for col in pivot_df.columns if col not in fixed_columns]
+        selected_columns = sorted(selected_columns, key=lambda x: int(x.split('_')[-1]), reverse=True)
+        selected_columns = sorted(selected_columns, key=lambda x: x.split('_')[0], reverse=False)
+        final_columns = fixed_columns + selected_columns
+        pivot_df = pivot_df[final_columns]
         
         logger.info(f"Pivoted chart classification data: {len(pivot_df)} records")
-        return pivot_df
+        return pd.DataFrame(pivot_df)
         
     except Exception as e:
         logger.error(f"Error pivoting chart classification data: {e}")
@@ -217,63 +223,47 @@ def main():
         # 4. Optimized merge operations
         logger.info("Performing optimized data merging...")
         
-        # Start with the largest dataset (comprehensive analysis)
-        all_df = comprehensive_df.copy()
+        # Start with chart classification data (pivot_df)
+        all_df = pivot_df.copy()
+        logger.info(f"Started with chart classification data: {len(all_df)} rows")
+        
+        # Merge with comprehensive analysis data
+        if not comprehensive_df.empty:
+            all_df = pd.merge(all_df, comprehensive_df, on='Code', how='left')
+            logger.info(f"Merged with comprehensive analysis data: {len(all_df)} rows")
         
         # Merge with yfinance data if available
         if not yfinance_df.empty:
             all_df = pd.merge(all_df, yfinance_df, on='Code', how='left')
             logger.info(f"Merged with yfinance data: {len(all_df)} rows")
-        
-        # Merge with chart classification data if available
-        if not pivot_df.empty:
-            all_df = pd.merge(all_df, pivot_df, on='Code', how='left')
-            logger.info(f"Merged with chart classification data: {len(all_df)} rows")
-        
+              
         # 5. Optimized column reordering and sorting
         logger.info("Optimizing final dataframe structure...")
         
         # Priority columns for reordering (most important first)
         priority_columns = [
-            'Code', 'composite_score', 'HlRatio', 'RelativeStrengthIndex', 
-            'minervini_score', 'ticker', 'shortName', 'sector', 'industry'
+            'Code', 'ticker', 'shortName', 'longName','sector', 'industry', 'marketCap',
+            'composite_score', 'HlRatio', 'RelativeStrengthIndex', 'minervini_score', 
         ]
         
         # Additional columns in logical order
-        additional_columns = [
-            'longName', 'marketCap', 'trailingPE', 'forwardPE', 'dividendYield', 
-            'currentPrice', 'regularMarketPrice', 'currency', 'exchange',
-            'previousClose', 'open', 'dayLow', 'dayHigh', 'volume',
-            'averageDailyVolume10Day', 'averageDailyVolume3Month',
-            'fiftyTwoWeekLow', 'fiftyTwoWeekHigh', 'fiftyDayAverage',
-            'twoHundredDayAverage', 'beta', 'priceToBook', 'enterpriseValue',
-            'profitMargins', 'grossMargins', 'operatingMargins', 'returnOnAssets',
-            'returnOnEquity', 'freeCashflow', 'totalCash', 'totalDebt',
-            'earningsGrowth', 'revenueGrowth', 'last_updated', 'Date_x',
-            'pattern_label_20', 'pattern_label_60', 'pattern_label_120',
-            'pattern_label_240', 'score_20', 'score_60', 'score_120', 'score_240',
-            'Date_y', 'MedianRatio', 'hl_weeks', 'minervini_close',
-            'Sma50', 'Sma150', 'Sma200', 'minervini_type_1', 'minervini_type_2',
-            'minervini_type_3', 'minervini_type_4', 'minervini_type_5',
-            'minervini_type_6', 'minervini_type_7', 'minervini_type_8',
-            'RelativeStrengthPercentage', 'website'
-        ]
+        additional_columns = [col for col in all_df.columns if col not in priority_columns]
         
         # Combine and filter for existing columns
         final_columns = priority_columns + additional_columns
-        existing_columns = [col for col in final_columns if col in all_df.columns]
+        # existing_columns = [col for col in final_columns if col in all_df.columns]
         
-        # Add any remaining columns not in our predefined list
-        remaining_columns = [col for col in all_df.columns if col not in existing_columns]
-        final_column_order = existing_columns + remaining_columns
+        # # Add any remaining columns not in our predefined list
+        # remaining_columns = [col for col in all_df.columns if col not in existing_columns]
+        # final_column_order = existing_columns + remaining_columns
         
         # Reorder columns efficiently
-        all_df = all_df[final_column_order]
+        all_df = all_df[final_columns]
         
         # Optimized sorting by composite score
         if 'composite_score' in all_df.columns:
             all_df['composite_score'] = pd.to_numeric(all_df['composite_score'], errors='coerce')
-            all_df = all_df.sort_values(by=['composite_score'], ascending=False, na_position='last')
+            all_df = all_df.sort_values(by=['composite_score'], ascending=False, na_position='last').reset_index(drop=True)
             logger.info("Sorted by composite score (descending)")
 
         logger.info("Displaying top 10 results:")
@@ -288,7 +278,7 @@ def main():
 
         try:
             # Use efficient Excel writing
-            all_df.to_excel(output_path, index=False, engine='openpyxl')
+            all_df.to_excel(output_path, index=True, engine='openpyxl')
             logger.info(f"Successfully saved the analysis to: {output_path}")
             logger.info(f"Final output contains {len(all_df)} rows and {len(all_df.columns)} columns")
         except Exception as e:

@@ -15,6 +15,7 @@ from backend.analysis.minervini_optimized import update_minervini_db_optimized, 
 # Removed dependency on old minervini module
 from backend.analysis.relative_strength_optimized import update_rsp_db_optimized, update_rsi_db_optimized, init_rsp_db_optimized, init_results_db_optimized
 from backend.analysis.integrated_analysis import create_analysis_summary
+from backend.analysis.chart_classification import main_full_run as run_chart_classification_full
 from backend.utils.parallel_processor import measure_performance
 
 
@@ -110,7 +111,7 @@ def run_daily_analysis_optimized(target_date: Optional[str] = None, modules: Opt
     analysis_config = DailyAnalysisConfig()
     logger = analysis_config.setup_logger()
     if modules is None:
-        modules = ['rsp', 'rsi', 'minervini', 'type8', 'hl_ratio', 'summary']
+        modules = ['rsp', 'rsi', 'minervini', 'type8', 'hl_ratio', 'summary', 'chart_classification']
     
     logger.info(f"Starting OPTIMIZED daily analysis workflow. Modules to run: {modules}")
 
@@ -315,6 +316,16 @@ def run_daily_analysis_optimized(target_date: Optional[str] = None, modules: Opt
                     logger.error(f"Error creating analysis summary: {e}", exc_info=True)
                     success = False
 
+            # 7. Chart Classification
+            if 'chart_classification' in modules:
+                logger.info("Running chart classification...")
+                try:
+                    run_chart_classification_full()
+                    logger.info("Chart classification completed.")
+                except Exception as e:
+                    logger.error(f"Error in chart classification: {e}", exc_info=True)
+                    success = False
+
         status_msg = "OPTIMIZED daily analysis workflow finished successfully." if success else "OPTIMIZED daily analysis workflow completed with errors."
         logger.info(status_msg)
 
@@ -331,7 +342,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Run optimized daily stock analysis')
     parser.add_argument('--date', type=str, help='Target date in YYYY-MM-DD format (default: latest from database)')
     parser.add_argument('--modules', type=str, nargs='+', 
-                       choices=['rsp', 'rsi', 'minervini', 'type8', 'hl_ratio', 'summary'],
+                       choices=['rsp', 'rsi', 'minervini', 'type8', 'hl_ratio', 'summary', 'chart_classification'],
                        help='Analysis modules to run (default: all modules)')
     args = parser.parse_args()
     

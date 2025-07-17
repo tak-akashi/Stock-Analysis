@@ -749,5 +749,8 @@ def main():
     elif args.mode == 'full-optimized':
         main_full_run_optimized()
 
+# Alias for backwards compatibility
+main_full_run = main_full_run_optimized
+
 if __name__ == "__main__":
     main()
